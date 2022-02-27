@@ -53,15 +53,14 @@ func (vm *VM) Run() error {
 				return err
 			}
 
-		case code.OpAdd:
-			right := vm.pop() // pop 的顺序应该与 push 的相反
-			left := vm.pop()
-			rightValue := right.(*object.Integer).Value
-			leftValue := left.(*object.Integer).Value
+		case code.OpAdd, code.OpSub, code.OpMul, code.OpDiv:
+			err := vm.executeBinaryOperation(op)
+			if err != nil {
+				return err
+			}
 
-			result := leftValue + rightValue
-			vm.push(&object.Integer{Value: result})
-
+		case code.OpPop:
+			vm.pop() // 清理 stack
 		}
 	}
 
@@ -83,4 +82,47 @@ func (vm *VM) pop() object.Object {
 	o := vm.stack[vm.sp-1]
 	vm.sp--
 	return o
+}
+
+func (vm *VM) LastPoppedStackElem() object.Object {
+	return vm.stack[vm.sp]
+}
+
+func (vm *VM) executeBinaryOperation(op code.Opcode) error {
+	right := vm.pop() // pop 的顺序应该与 push 的相反
+	left := vm.pop()
+
+	rightType := right.Type()
+	leftType := left.Type()
+
+	if leftType == object.INTEGER_OBJ && rightType == object.INTEGER_OBJ {
+		return vm.executeBinaryIntegerOperation(op, left, right)
+	}
+
+	return fmt.Errorf("unsupported types for binary operation: %s %s",
+		leftType, rightType)
+}
+
+func (vm *VM) executeBinaryIntegerOperation(op code.Opcode,
+	left object.Object, right object.Object) error {
+
+	rightValue := right.(*object.Integer).Value
+	leftValue := left.(*object.Integer).Value
+
+	var result int64
+
+	switch op {
+	case code.OpAdd:
+		result = leftValue + rightValue
+	case code.OpSub:
+		result = leftValue - rightValue
+	case code.OpMul:
+		result = leftValue * rightValue
+	case code.OpDiv:
+		result = leftValue / rightValue
+	default:
+		return fmt.Errorf("unknown integer operator: %d", op)
+	}
+
+	return vm.push(&object.Integer{Value: result})
 }

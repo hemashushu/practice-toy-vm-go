@@ -1,0 +1,31 @@
+// 定义（从左往右）折叠函数
+//
+// * list 是一个数组，比如 [1,2,3]
+// * initial 是初始值
+// * func 是一个函数，签名为
+//   (accumulator, element) -> result
+
+let fold = fn(list, initial, func) {
+    let iter = fn(list, accumulator) {
+        if (len(list) == 0) {
+            accumulator
+        } else {
+            iter(rest(list), func(accumulator, first(list)));
+        }
+    };
+    iter(list, initial);
+};
+
+// 使用折叠函数实现对数组元素求和
+let sum = fn(list) {
+    fold(
+        list,
+        0,
+        fn(accumulator, element) {
+            accumulator + element
+        }
+    );
+};
+
+let n = sum([1, 2, 3, 4, 5]);
+puts(n); // 输出 15

@@ -17,8 +17,12 @@ type Definition struct {
 
 // 操作码（指令）列表，可视为 "函数名称列表"。
 const (
-	OpConstant Opcode = iota // OpConstant: 定义常量
-	OpAdd                    // OpAdd: 加
+	OpConstant Opcode = iota // 定义常量
+	OpAdd                    // 加
+	OpPop                    // 弹出语句最后的值
+	OpSub
+	OpMul
+	OpDiv
 )
 
 // 操作码（指令）详细信息列表
@@ -32,6 +36,15 @@ var definitions = map[Opcode]*Definition{
 	// 作用：两个数相加
 	// 参数：无
 	OpAdd: {"OpAdd", []int{}},
+
+	// OpPop
+	// 作用：弹出语句最后的值
+	// 参数：无
+	OpPop: {"OpPop", []int{}},
+
+	OpSub: {"OpSub", []int{}},
+	OpMul: {"OpMul", []int{}},
+	OpDiv: {"OpDiv", []int{}},
 }
 
 // 编译
