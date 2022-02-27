@@ -1,14 +1,15 @@
 package compiler
 
 import (
+	"fmt"
 	"toyvm/ast"
 	"toyvm/code"
 	"toyvm/object"
 )
 
 type Compiler struct {
-	instructions code.Instructions // 字节码的指令部分
-	constants    []object.Object   // 字节码的数据部分
+	instructions code.Instructions // 字节码的指令部分，[]byte
+	constants    []object.Object   // 字节码的数据部分，[]Object
 }
 
 // "字节码" 包含了指令部分（.text）和数据部分(.data)
@@ -60,7 +61,12 @@ func (c *Compiler) Compile(n ast.Node) error {
 			return err
 		}
 
-		// todo::
+		switch node.Operator {
+		case "+":
+			c.emit(code.OpAdd)
+		default:
+			return fmt.Errorf("unknown operator %s", node.Operator)
+		}
 
 	case *ast.IntegerLiteral:
 		integer := &object.Integer{Value: node.Value}

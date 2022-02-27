@@ -10,8 +10,14 @@ func TestMake(t *testing.T) {
 		expected []byte // 预期产生的字节码的指令部分（byte 类型的数组）
 	}{
 		{
-			OpConstant, []int{65534}, // 操作码和参数
+			OpConstant,                         // 操作码
+			[]int{65534},                       // 参数
 			[]byte{byte(OpConstant), 255, 254}, // 预期的字节码的指令部分
+		},
+		{
+			OpAdd,
+			[]int{},
+			[]byte{byte(OpAdd)},
 		},
 	}
 
@@ -34,15 +40,22 @@ func TestMake(t *testing.T) {
 // 测试 ”反编译“（将字节码的指令部分，即一个 byte 数组，转为文本）
 func TestInstructionsString(t *testing.T) {
 	instructions := []Instructions{
-		Make(OpConstant, 1),
+		// Make(OpConstant, 1),
+		Make(OpAdd),
 		Make(OpConstant, 2),
 		Make(OpConstant, 65535),
 	}
 
-	expected := `0000 OpConstant 1
-0003 OpConstant 2
-0006 OpConstant 65535
+	expected :=
+		//`0000 OpConstant 1
+		// 0003 OpConstant 2
+		// 0006 OpConstant 65535
+		// `
+		`0000 OpAdd
+0001 OpConstant 2
+0004 OpConstant 65535
 `
+
 	concatted := Instructions{}
 	for _, ins := range instructions {
 		concatted = append(concatted, ins...)

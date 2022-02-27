@@ -9,30 +9,29 @@ import (
 type Instructions []byte
 type Opcode byte
 
-// 操作码（指令）列表，可视为 "函数名称列表"。
-const (
-	OpConstant Opcode = iota // OpConstant 定义常量
-)
-
 // 操作码（指令）详细信息，可视为 "函数的签名" 信息。
 type Definition struct {
-	Name          string
-	OperandWidths []int
+	Name          string // 指令名称
+	OperandWidths []int  // 参数的个数，以及各个参数的长度（单位为 byte）
 }
+
+// 操作码（指令）列表，可视为 "函数名称列表"。
+const (
+	OpConstant Opcode = iota // OpConstant: 定义常量
+	OpAdd                    // OpAdd: 加
+)
 
 // 操作码（指令）详细信息列表
 var definitions = map[Opcode]*Definition{
+	// OpConstant
+	// 作用：定义常量
+	// 参数：1. UInt16，记录数值在常量列表中的地址
 	OpConstant: {"OpConstant", []int{2}},
-}
 
-// 根据操作码（指令）查找操作码详细信息
-func Lookup(op byte) (*Definition, error) {
-	def, ok := definitions[Opcode(op)]
-	if !ok {
-		return nil, fmt.Errorf("opcode %d undefined", op)
-	}
-
-	return def, nil
+	// OpAdd
+	// 作用：两个数相加
+	// 参数：无
+	OpAdd: {"OpAdd", []int{}},
 }
 
 // 编译
@@ -66,7 +65,7 @@ func Make(op Opcode, operands ...int) []byte {
 }
 
 // 反编译
-// 将字节码当中的指令部分（一个 byte 数组）转换为字符串
+// 将字节码（包含有一个或多个指令）当中的指令部分（一个 byte 数组）转换为字符串
 // e.g.
 // "0000 OpConstant 1"
 // "0003 OpConstant 2"
@@ -89,6 +88,8 @@ func (ins Instructions) String() string {
 	return out.String()
 }
 
+// 反编译
+// 格式化指令名称、参数值
 func (ins Instructions) fmtInstruction(def *Definition, operands []int) string {
 	operandCount := len(def.OperandWidths)
 
@@ -98,6 +99,8 @@ func (ins Instructions) fmtInstruction(def *Definition, operands []int) string {
 	}
 
 	switch operandCount {
+	case 0:
+		return fmt.Sprintf("%s", def.Name)
 	case 1:
 		return fmt.Sprintf("%s %d", def.Name, operands[0])
 	}
@@ -105,9 +108,9 @@ func (ins Instructions) fmtInstruction(def *Definition, operands []int) string {
 	return fmt.Sprintf("ERROR: unhandled operandCount for %s\n", def.Name)
 }
 
-// 将字节码当中指令部分当中的参数部分（一个 byte 数组）
-// 将字节数组 "还原" 为操作码的参数列表（即 Operands）
-// 这时一个跟 Make 函数相反的操作
+// 反编译
+// 将字节码当中————指令部分当中的————参数部分（一个 byte 数组） "还原" 为
+// 操作码的参数（Operands）列表（一个 int 数组）
 func ReadOperands(def *Definition, ins Instructions) ([]int, int) {
 	operands := make([]int, len(def.OperandWidths))
 	offset := 0
@@ -125,4 +128,16 @@ func ReadOperands(def *Definition, ins Instructions) ([]int, int) {
 
 func ReadUint16(ins Instructions) uint16 {
 	return binary.BigEndian.Uint16(ins)
+}
+
+// 根据操作码（指令）查找操作码详细信息
+// 当前仅用于测试
+// 在 VM 的执行过程中，为了效率而直接硬编码操作码的详细信息
+func Lookup(op byte) (*Definition, error) {
+	def, ok := definitions[Opcode(op)]
+	if !ok {
+		return nil, fmt.Errorf("opcode %d undefined", op)
+	}
+
+	return def, nil
 }

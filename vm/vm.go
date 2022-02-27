@@ -52,6 +52,16 @@ func (vm *VM) Run() error {
 			if err != nil {
 				return err
 			}
+
+		case code.OpAdd:
+			right := vm.pop() // pop 的顺序应该与 push 的相反
+			left := vm.pop()
+			rightValue := right.(*object.Integer).Value
+			leftValue := left.(*object.Integer).Value
+
+			result := leftValue + rightValue
+			vm.push(&object.Integer{Value: result})
+
 		}
 	}
 
@@ -67,4 +77,10 @@ func (vm *VM) push(o object.Object) error {
 	vm.sp++
 
 	return nil
+}
+
+func (vm *VM) pop() object.Object {
+	o := vm.stack[vm.sp-1]
+	vm.sp--
+	return o
 }
