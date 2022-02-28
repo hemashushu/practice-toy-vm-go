@@ -7,6 +7,7 @@ import (
 	"toyvm/compiler"
 	"toyvm/lexer"
 	"toyvm/parser"
+	"toyvm/vm"
 )
 
 const PROMPT = ">> "
@@ -38,19 +39,17 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		fmt.Println(comp.Bytecode().Instructions.String())
+		machine := vm.New(comp.Bytecode())
+		err = machine.Run()
+		if err != nil {
+			fmt.Fprintf(out, "Executing bytecode failed: %s\n", err)
+			continue
+		}
 
-		// 		machine := vm.New(comp.Bytecode())
-		// 		err = machine.Run()
-		// 		if err != nil {
-		// 			fmt.Fprintf(out, "Executing bytecode failed: %s\n", err)
-		// 			continue
-		// 		}
-		//
-		// 		// stackTop := machine.StackTop()
-		// 		lastPopped := machine.LastPoppedStackElem()
-		// 		io.WriteString(out, lastPopped.Inspect())
-		// 		io.WriteString(out, "\n")
+		// stackTop := machine.StackTop()
+		lastPopped := machine.LastPoppedStackElem()
+		io.WriteString(out, lastPopped.Inspect())
+		io.WriteString(out, "\n")
 	}
 }
 

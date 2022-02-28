@@ -18,11 +18,22 @@ type Definition struct {
 // 操作码（指令）列表，可视为 "函数名称列表"。
 const (
 	OpConstant Opcode = iota // 定义常量
-	OpAdd                    // 加
 	OpPop                    // 弹出语句最后的值
-	OpSub
-	OpMul
-	OpDiv
+
+	OpAdd // 加
+	OpSub // 减
+	OpMul // 乘
+	OpDiv // 除
+
+	OpTrue  // 向栈压入 True
+	OpFalse // 向栈压入 False
+
+	OpEqual       // ==
+	OpNotEqual    // !=
+	OpGreaterThan // >
+
+	OpMinus // -
+	OpBang  // !
 )
 
 // 操作码（指令）详细信息列表
@@ -32,19 +43,35 @@ var definitions = map[Opcode]*Definition{
 	// 参数：1. UInt16，记录数值在常量列表中的地址
 	OpConstant: {"OpConstant", []int{2}},
 
-	// OpAdd
-	// 作用：两个数相加
-	// 参数：无
-	OpAdd: {"OpAdd", []int{}},
-
 	// OpPop
 	// 作用：弹出语句最后的值
 	// 参数：无
 	OpPop: {"OpPop", []int{}},
 
+	// OpAdd
+	// 作用：两个数相加
+	// 参数：无
+	OpAdd: {"OpAdd", []int{}},
 	OpSub: {"OpSub", []int{}},
 	OpMul: {"OpMul", []int{}},
 	OpDiv: {"OpDiv", []int{}},
+
+	// OpTrue/OpFalse
+	// 作用：向 stack 压入 True 或者 False
+	// 参数：无
+	OpTrue:  {"OpTrue", []int{}},
+	OpFalse: {"OpFalse", []int{}},
+
+	// OpEqual/OpNotEqual/OpGreaterThan
+	// 比较运算
+	OpEqual:       {"OpEqual", []int{}},
+	OpNotEqual:    {"OpNotEqual", []int{}},
+	OpGreaterThan: {"OpGreaterThan", []int{}},
+
+	// OpMinus/OpBang
+	// 一元操作
+	OpMinus: {"OpMinus", []int{}},
+	OpBang:  {"OpBang", []int{}},
 }
 
 // 编译

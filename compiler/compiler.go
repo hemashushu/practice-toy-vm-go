@@ -51,18 +51,27 @@ func (c *Compiler) Compile(n ast.Node) error {
 		}
 		c.emit(code.OpPop) // 弹出语句的最后一个结果（用于清除栈）
 
+	// 二元操作
 	case *ast.InfixExpression:
-		err := c.Compile(node.Left)
+		left, right, operator := node.Left, node.Right, node.Operator
+
+		if operator == "<" {
+			left = node.Right
+			right = node.Left
+			operator = ">"
+		}
+
+		err := c.Compile(left)
 		if err != nil {
 			return err
 		}
 
-		err = c.Compile(node.Right)
+		err = c.Compile(right)
 		if err != nil {
 			return err
 		}
 
-		switch node.Operator {
+		switch operator {
 		case "+":
 			c.emit(code.OpAdd)
 		case "-":
@@ -71,13 +80,47 @@ func (c *Compiler) Compile(n ast.Node) error {
 			c.emit(code.OpMul)
 		case "/":
 			c.emit(code.OpDiv)
+
+		case "==":
+			c.emit(code.OpEqual)
+		case "!=":
+			c.emit(code.OpNotEqual)
+		case ">":
+			c.emit(code.OpGreaterThan)
+
 		default:
-			return fmt.Errorf("unknown operator %s", node.Operator)
+			return fmt.Errorf("unknown operator %s", operator)
 		}
 
+	// 一元操作
+	case *ast.PrefixExpression:
+		value := node.Right
+		err := c.Compile(value)
+		if err != nil {
+			return err
+		}
+
+		operator := node.Operator
+		switch operator {
+		case "-":
+			c.emit(code.OpMinus)
+		case "!":
+			c.emit(code.OpBang)
+		default:
+			return fmt.Errorf("unknown operator %s", operator)
+		}
+
+	// 字面量
 	case *ast.IntegerLiteral:
 		integer := &object.Integer{Value: node.Value}
 		c.emit(code.OpConstant, c.addConstant(integer))
+
+	case *ast.Boolean:
+		if node.Value {
+			c.emit(code.OpTrue)
+		} else {
+			c.emit(code.OpFalse)
+		}
 	}
 
 	return nil
