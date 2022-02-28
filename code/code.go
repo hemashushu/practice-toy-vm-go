@@ -27,6 +27,7 @@ const (
 
 	OpTrue  // 向栈压入 True
 	OpFalse // 向栈压入 False
+	OpNull  // 向栈压入 Null
 
 	OpEqual       // ==
 	OpNotEqual    // !=
@@ -34,6 +35,9 @@ const (
 
 	OpMinus // -
 	OpBang  // !
+
+	OpJumpNotTruthy // 非 true 时跳转
+	OpJump          // 无条件跳转
 )
 
 // 操作码（指令）详细信息列表
@@ -61,6 +65,7 @@ var definitions = map[Opcode]*Definition{
 	// 参数：无
 	OpTrue:  {"OpTrue", []int{}},
 	OpFalse: {"OpFalse", []int{}},
+	OpNull:  {"OpNull", []int{}},
 
 	// OpEqual/OpNotEqual/OpGreaterThan
 	// 比较运算
@@ -72,6 +77,17 @@ var definitions = map[Opcode]*Definition{
 	// 一元操作
 	OpMinus: {"OpMinus", []int{}},
 	OpBang:  {"OpBang", []int{}},
+
+	// 非 true 时跳转
+	// 用于跳到 else 语句块开始位置，或者
+	// 跳到 if 语句整体结束的位置（在缺少 else 语句块时）
+	// 参数：1. UInt16 目标位置
+	OpJumpNotTruthy: {"OpJumpNotTruthy", []int{2}},
+
+	// 无条件跳转
+	// 跳到 if 语句整体结束的位置
+	// 参数：1. UInt16 目标位置
+	OpJump: {"OpJump", []int{2}},
 }
 
 // 编译

@@ -11,6 +11,7 @@ const StackSize = 2048
 
 var True = &object.Boolean{Value: true}   // Object 常量
 var False = &object.Boolean{Value: false} // Object 常量
+var Null = &object.Null{}                 // Object 常量
 
 type VM struct {
 	constants    []object.Object
@@ -62,6 +63,19 @@ func (vm *VM) Run() error {
 		case code.OpPop:
 			vm.pop()
 
+		case code.OpJumpNotTruthy:
+			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
+			ip += 2 // 因为 OpJumpNotTruthy 指令一共 3 个字节，另外 for 循环会 +1，所以下一条指令的位置是 ip + 3 - 1
+
+			condition := vm.pop()
+			if !isTruthy(condition) {
+				ip = pos - 1 // 因为 for 循环会 +1，所以 pos 需要 - 1
+			}
+
+		case code.OpJump:
+			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
+			ip = pos - 1 // 因为 for 循环会 +1，所以 pos 需要 - 1
+
 		// 加减乘除运算
 		case code.OpAdd, code.OpSub, code.OpMul, code.OpDiv:
 			err := vm.executeBinaryOperation(op)
@@ -75,7 +89,7 @@ func (vm *VM) Run() error {
 				return err
 			}
 
-			// 一元操作
+		// 一元操作
 		case code.OpMinus:
 			err := vm.executeMinusOperator()
 			if err != nil {
@@ -88,6 +102,7 @@ func (vm *VM) Run() error {
 				return err
 			}
 
+		// 置布尔值操作
 		case code.OpTrue:
 			err := vm.push(True)
 			if err != nil {
@@ -96,6 +111,12 @@ func (vm *VM) Run() error {
 
 		case code.OpFalse:
 			err := vm.push(False)
+			if err != nil {
+				return err
+			}
+
+		case code.OpNull:
+			err := vm.push(Null)
 			if err != nil {
 				return err
 			}
@@ -222,6 +243,8 @@ func (vm *VM) executeBangOperator() error {
 		return vm.push(False)
 	case False:
 		return vm.push(True)
+	case Null: // Null 视为 false
+		return vm.push(True)
 	default:
 		return vm.push(False)
 	}
@@ -234,4 +257,15 @@ func (vm *VM) executeMinusOperator() error {
 	}
 	value := operand.(*object.Integer).Value
 	return vm.push(&object.Integer{Value: -value})
+}
+
+func isTruthy(obj object.Object) bool {
+	switch obj := obj.(type) {
+	case *object.Boolean:
+		return obj.Value
+	case *object.Null:
+		return false
+	default:
+		return true // 非 Boolean 和 Null 的数据都作为 true
+	}
 }

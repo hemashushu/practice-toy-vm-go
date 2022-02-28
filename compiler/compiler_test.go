@@ -56,13 +56,13 @@ func testInstructions(expected []code.Instructions, actual code.Instructions) er
 	concatted := concatInstructions(expected)
 
 	if len(actual) != len(concatted) {
-		return fmt.Errorf("instructions length expected %q, actual %q",
+		return fmt.Errorf("instructions length expected\n%q, actual\n%q",
 			concatted, actual)
 	}
 
 	for i, ins := range concatted {
 		if actual[i] != ins {
-			return fmt.Errorf("[%d] instruction expected %q, actual %q",
+			return fmt.Errorf("[%d] instruction expected\n%q, actual\n%q",
 				i, concatted, actual)
 		}
 	}
@@ -90,7 +90,7 @@ func testConstants(t *testing.T, expected []interface{}, actual []object.Object)
 		case int:
 			err := testIntegerObject(int64(constant), actual[i])
 			if err != nil {
-				return fmt.Errorf("constant %d - testIntegerObject failed: %s",
+				return fmt.Errorf("[%d] testIntegerObject failed: %s",
 					i, err)
 			}
 		}
@@ -264,6 +264,73 @@ func TestBooleanExpressions(t *testing.T) {
 				code.Make(code.OpTrue),
 				code.Make(code.OpBang),
 				code.Make(code.OpPop),
+			},
+		},
+	}
+	runCompilerTests(t, tests)
+}
+
+func TestConditionals(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input: `
+			if (true) { 10 }; 3333;
+			`,
+			expectedConstants: []interface{}{10, 3333},
+			expectedInstructions: []code.Instructions{
+				/* 0000 */ code.Make(code.OpTrue), // 1 bytes
+				/* 0001 */ code.Make(code.OpJumpNotTruthy, 7), // 3 bytes
+				/* 0004 */ code.Make(code.OpConstant, 0), // 3 bytes
+				/* 0007 */ code.Make(code.OpPop), // 1 bytes
+				/* 0008 */ code.Make(code.OpConstant, 1), // 3 bytes
+				/* 0011 */ code.Make(code.OpPop), // 1 bytes
+			},
+		},
+	}
+
+	runCompilerTests(t, tests)
+}
+
+func TestConditionals2(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input: `
+			if (true) { 10 } else { 20 }; 3333;
+			`,
+			expectedConstants: []interface{}{10, 20, 3333},
+			expectedInstructions: []code.Instructions{
+				/* 0000 */ code.Make(code.OpTrue), // 1 bytes
+				/* 0001 */ code.Make(code.OpJumpNotTruthy, 10), // 3 bytes
+				/* 0004 */ code.Make(code.OpConstant, 0), // 3 bytes, "10" 语句
+				/* 0007 */ code.Make(code.OpJump, 13), // 3 bytes
+				/* 0010 */ code.Make(code.OpConstant, 1), // 3 bytes, "20" 语句
+				/* 0013 */ code.Make(code.OpPop), // 1 bytes, "if..." 语句的结束
+				/* 0014 */ code.Make(code.OpConstant, 2), // 3 bytes
+				/* 0017 */ code.Make(code.OpPop), // 1 bytes, "3333;" 语句的结束
+			},
+		},
+	}
+
+	runCompilerTests(t, tests)
+}
+
+// 测试当 if 语句的条件不成立，但又缺少 alternative 语句块的情况
+func TestConditionals3(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input: `
+			if (true) { 10 }; 3333;
+			`,
+			expectedConstants: []interface{}{10, 3333},
+			expectedInstructions: []code.Instructions{
+				/* 0000 */ code.Make(code.OpTrue), // 1 bytes
+				/* 0001 */ code.Make(code.OpJumpNotTruthy, 10), // 3 bytes
+				/* 0004 */ code.Make(code.OpConstant, 0), // 3 bytes, ;; "10"
+				/* 0007 */ code.Make(code.OpJump, 11), // 3 bytes
+				/* 0010 */ code.Make(code.OpNull), // 1 bytes ;; 因为缺少 alternative 语句块而补上的指令
+				/* 0011 */ code.Make(code.OpPop), // 1 bytes
+				/* 0012 */ code.Make(code.OpConstant, 1), // 3 bytes, ;; "3333"
+				/* 0015 */ code.Make(code.OpPop), // 1 bytes
 			},
 		},
 	}

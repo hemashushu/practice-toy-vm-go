@@ -62,6 +62,10 @@ func testExpectedObject(
 		if err != nil {
 			t.Errorf("testBooleanObject failed: %s", err)
 		}
+	case *object.Null:
+		if actual != Null {
+			t.Errorf("expected object Null, actual: %T, %+v", actual, actual)
+		}
 	}
 }
 
@@ -144,6 +148,33 @@ func TestBooleanExpressions(t *testing.T) {
 		{"!!true", true},
 		{"!!false", false},
 		{"!!5", true},
+
+		//
+		{"!(if (false) { 5; })", true},
+	}
+	runVmTests(t, tests)
+}
+
+func TestConditionals(t *testing.T) {
+	tests := []vmTestCase{
+		{"if (true) { 10 }", 10},
+		{"if (true) { 10 } else { 20 }", 10},
+		{"if (false) { 10 } else { 20 } ", 20},
+		{"if (1) { 10 }", 10},
+		{"if (1 < 2) { 10 }", 10},
+		{"if (1 < 2) { 10 } else { 20 }", 10},
+		{"if (1 > 2) { 10 } else { 20 }", 20},
+		{"if ((if (false) { 10 })) { 10 } else { 20 }", 20},
+	}
+
+	runVmTests(t, tests)
+}
+
+func TestConditionals2(t *testing.T) {
+	tests := []vmTestCase{
+		// [...]
+		{"if (1 > 2) { 10 }", Null},
+		{"if (false) { 10 }", Null},
 	}
 	runVmTests(t, tests)
 }
