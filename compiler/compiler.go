@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"sort"
 	"toyvm/ast"
 	"toyvm/code"
 	"toyvm/object"
@@ -205,6 +206,58 @@ func (c *Compiler) Compile(n ast.Node) error {
 		default:
 			return fmt.Errorf("unknown operator %s", operator)
 		}
+
+	// 复合数据类型
+	case *ast.ArrayLiteral:
+		for _, element := range node.Elements {
+			err := c.Compile(element)
+			if err != nil {
+				return err
+			}
+		}
+
+		c.emit(code.OpArray, len(node.Elements))
+
+	case *ast.HashLiteral:
+		keys := []ast.Expression{} // 先获取 Hash（Map）Literal 的 keys
+		for key := range node.Pairs {
+			keys = append(keys, key)
+		}
+
+		// 对 keys 排序（可选的，主要为了方便测试，否则 key 的顺序是随机的）
+		sort.Slice(keys, func(i int, j int) bool {
+			return keys[i].String() < keys[j].String()
+		})
+
+		for _, key := range keys {
+			err := c.Compile(key)
+			if err != nil {
+				return err
+			}
+
+			err = c.Compile(node.Pairs[key])
+			if err != nil {
+				return err
+			}
+		}
+
+		c.emit(code.OpHash, len(node.Pairs)*2)
+
+	// 求 Array 和 Hash 的索引
+	case *ast.IndexExpression:
+		err := c.Compile(node.Left)
+
+		if err != nil {
+			return err
+		}
+
+		err = c.Compile(node.Index)
+
+		if err != nil {
+			return err
+		}
+
+		c.emit(code.OpIndex)
 
 	// 标识符
 	case *ast.Identifier:

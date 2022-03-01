@@ -41,6 +41,10 @@ const (
 
 	OpGetGlobal // 获取标识符的值
 	OpSetGlobal // 保存标识符的值
+
+	OpArray // 生成 Array
+	OpHash  // 生成 Hash（Map）
+	OpIndex // Array 和 Hash 的索引
 )
 
 // 操作码（指令）详细信息列表
@@ -101,6 +105,16 @@ var definitions = map[Opcode]*Definition{
 	// 弹出栈顶的值，并把值保存到 global 列表
 	// 参数：1. UInt16 目标位置
 	OpSetGlobal: {"OpSetGlobal", []int{2}},
+
+	// 使用栈的前 N 项数值生成一个 Array 对象
+	// 参数：1. UInt16 元素的个数
+	OpArray: {"OpArray", []int{2}},
+
+	// 使用栈的前 N 项键值对生成一个 Hash(Map) 对象
+	// 参数：1. UInt16 键值对（Pair）的个数
+	OpHash: {"OpHash", []int{2}},
+
+	OpIndex: {"OpIndex", []int{}},
 }
 
 // 编译
