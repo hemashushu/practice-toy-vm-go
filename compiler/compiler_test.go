@@ -93,8 +93,16 @@ func testConstants(t *testing.T, expected []interface{}, actual []object.Object)
 				return fmt.Errorf("[%d] testIntegerObject failed: %s",
 					i, err)
 			}
+
+		// 添加对 String 的支持
+		case string:
+			err := testStringObject(constant, actual[i])
+			if err != nil {
+				return fmt.Errorf("[%d] testStringObject failed: %s", i, err)
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -110,6 +118,19 @@ func testIntegerObject(expected int64, actual object.Object) error {
 			expected, result.Value)
 	}
 
+	return nil
+}
+
+func testStringObject(expected string, actual object.Object) error {
+	result, ok := actual.(*object.String)
+	if !ok {
+		return fmt.Errorf("object is not String, actual %T, %+v",
+			actual, actual)
+	}
+	if result.Value != expected {
+		return fmt.Errorf("object has wrong value, expected %q, actual %q",
+			expected, result.Value)
+	}
 	return nil
 }
 
@@ -280,12 +301,15 @@ func TestConditionals(t *testing.T) {
 			expectedInstructions: []code.Instructions{
 				/* 0000 */ code.Make(code.OpTrue), // 1 bytes
 
+				// 在支持 Null 之前的 if 语句
+				//
 				// /* 0001 */ code.Make(code.OpJumpNotTruthy, 7), // 3 bytes
 				// /* 0004 */ code.Make(code.OpConstant, 0), // 3 bytes
 				// /* 0007 */ code.Make(code.OpPop), // 1 bytes
 				// /* 0008 */ code.Make(code.OpConstant, 1), // 3 bytes
 				// /* 0011 */ code.Make(code.OpPop), // 1 bytes
 
+				// 支持 Null 之后的 if 语句
 				/* 0001 */ code.Make(code.OpJumpNotTruthy, 10), // 3 bytes
 				/* 0004 */ code.Make(code.OpConstant, 0), // 3 bytes
 				/* 0007 */ code.Make(code.OpJump, 11), // 3 bytes
@@ -392,5 +416,29 @@ func TestGlobalLetStatements(t *testing.T) {
 		},
 	}
 
+	runCompilerTests(t, tests)
+}
+
+func TestStringExpressions(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input:             `"monkey"`,
+			expectedConstants: []interface{}{"monkey"},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),
+				code.Make(code.OpPop),
+			},
+		},
+		{
+			input:             `"mon" + "key"`,
+			expectedConstants: []interface{}{"mon", "key"},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),
+				code.Make(code.OpConstant, 1),
+				code.Make(code.OpAdd),
+				code.Make(code.OpPop),
+			},
+		},
+	}
 	runCompilerTests(t, tests)
 }
