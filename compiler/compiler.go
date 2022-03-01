@@ -19,6 +19,8 @@ type Compiler struct {
 
 	lastInstruction     EmittedInstruction // 最近一次指令
 	previousInstruction EmittedInstruction // 倒数第二次指令
+
+	symbolTable *SymbolTable
 }
 
 func New() *Compiler {
@@ -28,7 +30,19 @@ func New() *Compiler {
 
 		lastInstruction:     EmittedInstruction{},
 		previousInstruction: EmittedInstruction{},
+
+		symbolTable: NewSymbolTable(),
 	}
+}
+
+func NewWithState(
+	symbolTable *SymbolTable,
+	constants []object.Object) *Compiler {
+
+	compiler := New()
+	compiler.symbolTable = symbolTable
+	compiler.constants = constants
+	return compiler
 }
 
 // "字节码" 包含了指令部分（.text）和数据部分(.data)
@@ -123,6 +137,16 @@ func (c *Compiler) Compile(n ast.Node) error {
 		c.changeOperand(jumpNotTruthyPos, alternativePos)
 		c.changeOperand(jumpPos, afterAlternativePos)
 
+	// 标识符定义和赋值语句
+	case *ast.LetStatement:
+		err := c.Compile(node.Value)
+		if err != nil {
+			return err
+		}
+
+		symbol := c.symbolTable.Define(node.Name.Value)
+		c.emit(code.OpSetGlobal, symbol.Index)
+
 	// 二元操作
 	case *ast.InfixExpression:
 		left, right, operator := node.Left, node.Right, node.Operator
@@ -181,6 +205,15 @@ func (c *Compiler) Compile(n ast.Node) error {
 		default:
 			return fmt.Errorf("unknown operator %s", operator)
 		}
+
+	// 标识符
+	case *ast.Identifier:
+		symbol, ok := c.symbolTable.Resolve(node.Value)
+		if !ok {
+			return fmt.Errorf("undefined variable %s", node.Value)
+		}
+
+		c.emit(code.OpGetGlobal, symbol.Index)
 
 	// 字面量
 	case *ast.IntegerLiteral:

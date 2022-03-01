@@ -38,6 +38,9 @@ const (
 
 	OpJumpNotTruthy // 非 true 时跳转
 	OpJump          // 无条件跳转
+
+	OpGetGlobal // 获取标识符的值
+	OpSetGlobal // 保存标识符的值
 )
 
 // 操作码（指令）详细信息列表
@@ -88,6 +91,16 @@ var definitions = map[Opcode]*Definition{
 	// 跳到 if 语句整体结束的位置
 	// 参数：1. UInt16 目标位置
 	OpJump: {"OpJump", []int{2}},
+
+	// 获取标识符的值
+	// 从 global 列表里获取指定位置的值，然后压入栈
+	// 参数：1. UInt16 目标位置
+	OpGetGlobal: {"OpGetGlobal", []int{2}},
+
+	// 保存标识符的值
+	// 弹出栈顶的值，并把值保存到 global 列表
+	// 参数：1. UInt16 目标位置
+	OpSetGlobal: {"OpSetGlobal", []int{2}},
 }
 
 // 编译

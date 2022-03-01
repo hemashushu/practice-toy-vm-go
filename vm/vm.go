@@ -7,7 +7,8 @@ import (
 	"toyvm/object"
 )
 
-const StackSize = 2048
+const StackSize = 2048    // 栈容量
+const GlobalsSize = 65536 // 符号容量
 
 var True = &object.Boolean{Value: true}   // Object 常量
 var False = &object.Boolean{Value: false} // Object 常量
@@ -23,6 +24,8 @@ type VM struct {
 	// 栈指针，指向下一个空闲的位置。如果栈有一个元素，则 sp 的值为 1，所以也可以
 	// 视为栈的当前元素的数量
 	sp int
+
+	globals []object.Object
 }
 
 func New(bytecode *compiler.Bytecode) *VM {
@@ -31,7 +34,16 @@ func New(bytecode *compiler.Bytecode) *VM {
 		constants:    bytecode.Constants,
 		stack:        make([]object.Object, StackSize),
 		sp:           0,
+		globals:      make([]object.Object, GlobalsSize),
 	}
+}
+
+func NewWithGlobalsStore(
+	bytecode *compiler.Bytecode,
+	globals []object.Object) *VM {
+	vm := New(bytecode)
+	vm.globals = globals
+	return vm
 }
 
 func (vm *VM) StackTop() object.Object {
@@ -49,6 +61,7 @@ func (vm *VM) Run() error {
 
 		// decode
 		switch op {
+
 		// 定义常量
 		case code.OpConstant:
 			constIndex := code.ReadUint16(vm.instructions[ip+1:])
@@ -63,6 +76,7 @@ func (vm *VM) Run() error {
 		case code.OpPop:
 			vm.pop()
 
+		// 条件跳转（false 时跳转）
 		case code.OpJumpNotTruthy:
 			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
 			ip += 2 // 因为 OpJumpNotTruthy 指令一共 3 个字节，另外 for 循环会 +1，所以下一条指令的位置是 ip + 3 - 1
@@ -72,6 +86,7 @@ func (vm *VM) Run() error {
 				ip = pos - 1 // 因为 for 循环会 +1，所以 pos 需要 - 1
 			}
 
+		// 无条件跳转
 		case code.OpJump:
 			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
 			ip = pos - 1 // 因为 for 循环会 +1，所以 pos 需要 - 1
@@ -85,6 +100,22 @@ func (vm *VM) Run() error {
 
 		case code.OpEqual, code.OpNotEqual, code.OpGreaterThan:
 			err := vm.executeComparison(op)
+			if err != nil {
+				return err
+			}
+
+		// 标识符操作
+		case code.OpSetGlobal:
+			globalIndex := code.ReadUint16(vm.instructions[ip+1:])
+			ip += 2
+
+			vm.globals[globalIndex] = vm.pop()
+
+		case code.OpGetGlobal:
+			globalIndex := code.ReadUint16(vm.instructions[ip+1:])
+			ip += 2
+
+			err := vm.push(vm.globals[globalIndex])
 			if err != nil {
 				return err
 			}
@@ -243,7 +274,9 @@ func (vm *VM) executeBangOperator() error {
 		return vm.push(False)
 	case False:
 		return vm.push(True)
-	case Null: // Null 视为 false
+	case Null:
+		// Null 视为 false
+		// 注意 toy 语句没有 null 字面量
 		return vm.push(True)
 	default:
 		return vm.push(False)
@@ -266,6 +299,8 @@ func isTruthy(obj object.Object) bool {
 	case *object.Null:
 		return false
 	default:
-		return true // 非 Boolean 和 Null 的数据都作为 true
+		// 非 Boolean 和 Null 的数据都作为 true
+		// 注意 toy 语句没有 null 字面量
+		return true
 	}
 }

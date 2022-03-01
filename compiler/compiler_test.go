@@ -279,11 +279,20 @@ func TestConditionals(t *testing.T) {
 			expectedConstants: []interface{}{10, 3333},
 			expectedInstructions: []code.Instructions{
 				/* 0000 */ code.Make(code.OpTrue), // 1 bytes
-				/* 0001 */ code.Make(code.OpJumpNotTruthy, 7), // 3 bytes
+
+				// /* 0001 */ code.Make(code.OpJumpNotTruthy, 7), // 3 bytes
+				// /* 0004 */ code.Make(code.OpConstant, 0), // 3 bytes
+				// /* 0007 */ code.Make(code.OpPop), // 1 bytes
+				// /* 0008 */ code.Make(code.OpConstant, 1), // 3 bytes
+				// /* 0011 */ code.Make(code.OpPop), // 1 bytes
+
+				/* 0001 */ code.Make(code.OpJumpNotTruthy, 10), // 3 bytes
 				/* 0004 */ code.Make(code.OpConstant, 0), // 3 bytes
-				/* 0007 */ code.Make(code.OpPop), // 1 bytes
-				/* 0008 */ code.Make(code.OpConstant, 1), // 3 bytes
-				/* 0011 */ code.Make(code.OpPop), // 1 bytes
+				/* 0007 */ code.Make(code.OpJump, 11), // 3 bytes
+				/* 0010 */ code.Make(code.OpNull), // 1 bytes
+				/* 0011 */ code.Make(code.OpPop), // 1 bytes ;; 清理 if 语句的值
+				/* 0012 */ code.Make(code.OpConstant, 1), // 3 bytes
+				/* 0015 */ code.Make(code.OpPop), // 1 bytes
 			},
 		},
 	}
@@ -334,5 +343,54 @@ func TestConditionals3(t *testing.T) {
 			},
 		},
 	}
+	runCompilerTests(t, tests)
+}
+
+func TestGlobalLetStatements(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input: `
+			let one = 1;
+			let two = 2;
+			`,
+			expectedConstants: []interface{}{1, 2},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),
+				code.Make(code.OpSetGlobal, 0),
+				code.Make(code.OpConstant, 1),
+				code.Make(code.OpSetGlobal, 1),
+			},
+		},
+		{
+			input: `
+			let one = 1;
+			one;
+			`,
+			expectedConstants: []interface{}{1},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),
+				code.Make(code.OpSetGlobal, 0),
+				code.Make(code.OpGetGlobal, 0),
+				code.Make(code.OpPop),
+			},
+		},
+		{
+			input: `
+			let one = 1;
+			let two = one;
+			two;
+			`,
+			expectedConstants: []interface{}{1},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),
+				code.Make(code.OpSetGlobal, 0),
+				code.Make(code.OpGetGlobal, 0),
+				code.Make(code.OpSetGlobal, 1),
+				code.Make(code.OpGetGlobal, 1),
+				code.Make(code.OpPop),
+			},
+		},
+	}
+
 	runCompilerTests(t, tests)
 }

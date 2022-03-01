@@ -6,6 +6,7 @@ import (
 	"io"
 	"toyvm/compiler"
 	"toyvm/lexer"
+	"toyvm/object"
 	"toyvm/parser"
 	"toyvm/vm"
 )
@@ -13,6 +14,11 @@ import (
 const PROMPT = ">> "
 
 func Start(in io.Reader, out io.Writer) {
+	// 编译器和 VM 的状态
+	constants := []object.Object{}
+	symbolTable := compiler.NewSymbolTable()
+	globals := make([]object.Object, vm.GlobalsSize)
+
 	scanner := bufio.NewScanner(in)
 	for {
 		fmt.Fprint(out, PROMPT)
@@ -32,14 +38,14 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		comp := compiler.New()
+		comp := compiler.NewWithState(symbolTable, constants)
 		err := comp.Compile(program)
 		if err != nil {
 			fmt.Fprintf(out, "Compilation failed: %s\n", err)
 			continue
 		}
 
-		machine := vm.New(comp.Bytecode())
+		machine := vm.NewWithGlobalsStore(comp.Bytecode(), globals)
 		err = machine.Run()
 		if err != nil {
 			fmt.Fprintf(out, "Executing bytecode failed: %s\n", err)
