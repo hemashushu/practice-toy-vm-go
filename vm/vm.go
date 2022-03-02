@@ -7,34 +7,53 @@ import (
 	"toyvm/object"
 )
 
-const StackSize = 2048    // 栈容量
+const StackSize = 2048    // 运算栈容量
 const GlobalsSize = 65536 // 符号容量
+const MaxFrames = 1024    // 调用栈的容量
 
 var True = &object.Boolean{Value: true}   // Object 常量
 var False = &object.Boolean{Value: false} // Object 常量
 var Null = &object.Null{}                 // Object 常量
 
 type VM struct {
-	constants    []object.Object
-	instructions code.Instructions
+	constants []object.Object
+	// instructions code.Instructions
 
+	// 运算栈
+	// 注意运算栈里存储的不是单纯数字（比如 int），而是 object.Object 对象
 	stack []object.Object
 
 	// Always points to the next value. Top of stack is stack[sp-1]
 	// 栈指针，指向下一个空闲的位置。如果栈有一个元素，则 sp 的值为 1，所以也可以
-	// 视为栈的当前元素的数量
+	// 视为栈当中当前元素的数量，准确名称是 stackCount
 	sp int
 
+	// 全局标识符
 	globals []object.Object
+
+	frames     []*Frame // 调用帧列表
+	frameIndex int      // 调用帧的数量，准确名称是 frameCount
 }
 
 func New(bytecode *compiler.Bytecode) *VM {
+	mainFn := &object.CompiledFunction{
+		Instructions: bytecode.Instructions,
+	}
+	mainFrame := NewFrame(mainFn, 0)
+
+	frames := make([]*Frame, MaxFrames)
+	frames[0] = mainFrame
+
 	return &VM{
-		instructions: bytecode.Instructions,
-		constants:    bytecode.Constants,
-		stack:        make([]object.Object, StackSize),
-		sp:           0,
-		globals:      make([]object.Object, GlobalsSize),
+		// instructions: bytecode.Instructions,
+
+		constants: bytecode.Constants,
+		stack:     make([]object.Object, StackSize),
+		sp:        0, // 栈当中当前元素的数量，准确名称是 stackCount
+		globals:   make([]object.Object, GlobalsSize),
+
+		frames:     frames,
+		frameIndex: 1, // 调用帧的数量，准确名称是 frameCount
 	}
 }
 
@@ -46,26 +65,51 @@ func NewWithGlobalsStore(
 	return vm
 }
 
-func (vm *VM) StackTop() object.Object {
-	if vm.sp == 0 {
-		return nil
-	}
+// func (vm *VM) StackTop() object.Object {
+// 	if vm.sp == 0 {
+// 		return nil
+// 	}
+//
+// 	return vm.stack[vm.sp-1]
+// }
 
-	return vm.stack[vm.sp-1]
+func (vm *VM) currentFrame() *Frame {
+	return vm.frames[vm.frameIndex-1]
+}
+
+func (vm *VM) pushFrame(f *Frame) {
+	vm.frames[vm.frameIndex] = f
+	vm.frameIndex++
+}
+
+func (vm *VM) popFrame() *Frame {
+	vm.frameIndex--
+	return vm.frames[vm.frameIndex]
 }
 
 func (vm *VM) Run() error {
-	for ip := 0; ip < len(vm.instructions); ip++ {
+	var ip int
+	var ins code.Instructions
+	var op code.Opcode
+
+	// for ip := 0; ip < len(vm.instructions); ip++ {
+	for vm.currentFrame().ip < len(vm.currentFrame().Instructions())-1 {
+		vm.currentFrame().ip++
+
 		// fetch
-		op := code.Opcode(vm.instructions[ip])
+		ip = vm.currentFrame().ip
+		ins = vm.currentFrame().Instructions()
+		op = code.Opcode(ins[ip])
+		// op := code.Opcode(vm.instructions[ip])
 
 		// decode
 		switch op {
 
 		// 定义常量
 		case code.OpConstant:
-			constIndex := code.ReadUint16(vm.instructions[ip+1:])
-			ip += 2
+			constIndex := code.ReadUint16(ins[ip+1:]) // code.ReadUint16(vm.instructions[ip+1:])
+			vm.currentFrame().ip += 2                 // ip += 2
+
 			// execute
 			err := vm.push(vm.constants[constIndex])
 			if err != nil {
@@ -78,18 +122,75 @@ func (vm *VM) Run() error {
 
 		// 条件跳转（false 时跳转）
 		case code.OpJumpNotTruthy:
-			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
-			ip += 2 // 因为 OpJumpNotTruthy 指令一共 3 个字节，另外 for 循环会 +1，所以下一条指令的位置是 ip + 3 - 1
+			pos := int(code.ReadUint16(ins[ip+1:])) // int(code.ReadUint16(vm.instructions[ip+1:]))
+			// ip += 2                                 // 因为 OpJumpNotTruthy 指令一共 3 个字节，另外 for 循环会 +1，所以下一条指令的位置是 ip + 3 - 1
+			vm.currentFrame().ip += 2
 
 			condition := vm.pop()
 			if !isTruthy(condition) {
-				ip = pos - 1 // 因为 for 循环会 +1，所以 pos 需要 - 1
+				// ip = pos - 1 // 因为 for 循环会 +1，所以 pos 需要 - 1
+				vm.currentFrame().ip = pos - 1
 			}
 
 		// 无条件跳转
 		case code.OpJump:
-			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
-			ip = pos - 1 // 因为 for 循环会 +1，所以 pos 需要 - 1
+			pos := int(code.ReadUint16(ins[ip+1:])) // int(code.ReadUint16(vm.instructions[ip+1:]))
+			// ip = pos - 1                            // 因为 for 循环会 +1，所以 pos 需要 - 1
+			vm.currentFrame().ip = pos - 1
+
+		// 函数调用
+		case code.OpCall:
+			fn, ok := vm.stack[vm.sp-1].(*object.CompiledFunction)
+			if !ok {
+				return fmt.Errorf("calling non-function")
+			}
+
+			frame := NewFrame(fn, vm.sp)
+			vm.pushFrame(frame)                      // 压入新的调用帧
+			vm.sp = frame.basePointer + fn.NumLocals // 保留空间给（自定义函数的）局部变量
+
+		case code.OpReturnValue:
+			returnValue := vm.pop()
+
+			// vm.popFrame()
+			// vm.pop()
+			frame := vm.popFrame()
+
+			// 重置 sp 为 frame.basePointer，用于清除保留局部变量空间
+			// `- 1` 相当于 pop() 了一次
+			vm.sp = frame.basePointer - 1
+
+			err := vm.push(returnValue)
+			if err != nil {
+				return err
+			}
+
+		case code.OpReturn:
+			vm.popFrame()
+			vm.pop()
+
+			err := vm.push(Null)
+			if err != nil {
+				return err
+			}
+
+		case code.OpSetLocal:
+			localIndex := code.ReadUint8(ins[ip+1:])
+			vm.currentFrame().ip += 1
+
+			frame := vm.currentFrame()
+			vm.stack[frame.basePointer+int(localIndex)] = vm.pop() // 通过 “帧指针+偏移值” 计算出局部变量的位置
+
+		case code.OpGetLocal:
+			localIndex := code.ReadUint8(ins[ip+1:])
+			vm.currentFrame().ip += 1
+
+			frame := vm.currentFrame()
+
+			err := vm.push(vm.stack[frame.basePointer+int(localIndex)])
+			if err != nil {
+				return err
+			}
 
 		// 加减乘除运算
 		case code.OpAdd, code.OpSub, code.OpMul, code.OpDiv:
@@ -106,14 +207,16 @@ func (vm *VM) Run() error {
 
 		// 标识符操作
 		case code.OpSetGlobal:
-			globalIndex := code.ReadUint16(vm.instructions[ip+1:])
-			ip += 2
+			globalIndex := code.ReadUint16(ins[ip+1:]) // code.ReadUint16(vm.instructions[ip+1:])
+			// ip += 2
+			vm.currentFrame().ip += 2
 
 			vm.globals[globalIndex] = vm.pop()
 
 		case code.OpGetGlobal:
-			globalIndex := code.ReadUint16(vm.instructions[ip+1:])
-			ip += 2
+			globalIndex := code.ReadUint16(ins[ip+1:]) // code.ReadUint16(vm.instructions[ip+1:])
+			// ip += 2
+			vm.currentFrame().ip += 2
 
 			err := vm.push(vm.globals[globalIndex])
 			if err != nil {
@@ -135,8 +238,9 @@ func (vm *VM) Run() error {
 
 		// 创建 Array
 		case code.OpArray:
-			count := int(code.ReadUint16(vm.instructions[ip+1:]))
-			ip += 2
+			count := int(code.ReadUint16(ins[ip+1:])) // int(code.ReadUint16(vm.instructions[ip+1:]))
+			// ip += 2
+			vm.currentFrame().ip += 2
 
 			array := vm.buildArray(vm.sp-count, vm.sp)
 
@@ -151,8 +255,9 @@ func (vm *VM) Run() error {
 
 		// 创建 Hash(Map)
 		case code.OpHash:
-			count := int(code.ReadUint16(vm.instructions[ip+1:]))
-			ip += 2
+			count := int(code.ReadUint16(ins[ip+1:])) // int(code.ReadUint16(vm.instructions[ip+1:]))
+			// ip += 2
+			vm.currentFrame().ip += 2
 
 			hash, err := vm.buildHash(vm.sp-count, vm.sp)
 			if err != nil {

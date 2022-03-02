@@ -14,25 +14,41 @@ type EmittedInstruction struct {
 	Position int
 }
 
-type Compiler struct {
-	instructions code.Instructions // 字节码的指令部分，[]byte
-	constants    []object.Object   // 字节码的数据部分，[]Object
-
+type CompilationScope struct {
+	instructions        code.Instructions  // 字节码的指令部分，[]byte
 	lastInstruction     EmittedInstruction // 最近一次指令
 	previousInstruction EmittedInstruction // 倒数第二次指令
+}
 
+type Compiler struct {
+	constants   []object.Object // 字节码的数据部分，[]Object
 	symbolTable *SymbolTable
+
+	// instructions        code.Instructions  // 字节码的指令部分，[]byte
+	// lastInstruction     EmittedInstruction // 最近一次指令
+	// previousInstruction EmittedInstruction // 倒数第二次指令
+
+	scopes     []CompilationScope
+	scopeIndex int
 }
 
 func New() *Compiler {
-	return &Compiler{
-		instructions: code.Instructions{},
-		constants:    []object.Object{},
-
+	mainScope := CompilationScope{
+		instructions:        code.Instructions{},
 		lastInstruction:     EmittedInstruction{},
 		previousInstruction: EmittedInstruction{},
+	}
 
+	return &Compiler{
+		constants:   []object.Object{},
 		symbolTable: NewSymbolTable(),
+
+		// instructions:        code.Instructions{},
+		// lastInstruction:     EmittedInstruction{},
+		// previousInstruction: EmittedInstruction{},
+
+		scopes:     []CompilationScope{mainScope},
+		scopeIndex: 0,
 	}
 }
 
@@ -46,6 +62,10 @@ func NewWithState(
 	return compiler
 }
 
+func (c *Compiler) currentInstructions() code.Instructions {
+	return c.scopes[c.scopeIndex].instructions
+}
+
 // "字节码" 包含了指令部分（.text）和数据部分(.data)
 type Bytecode struct {
 	Instructions code.Instructions
@@ -54,7 +74,7 @@ type Bytecode struct {
 
 func (c *Compiler) Bytecode() *Bytecode {
 	return &Bytecode{
-		Instructions: c.instructions,
+		Instructions: c.currentInstructions(), // c.instructions,
 		Constants:    c.constants,
 	}
 }
@@ -111,7 +131,8 @@ func (c *Compiler) Compile(n ast.Node) error {
 		jumpPos := c.emit(code.OpJump, 0)
 
 		// 记录 alternative 语句块开始位置
-		alternativePos := len(c.instructions)
+		// alternativePos := len(c.instructions)
+		alternativePos := len(c.currentInstructions())
 
 		// 判断是否存在 Alternative
 
@@ -132,11 +153,64 @@ func (c *Compiler) Compile(n ast.Node) error {
 			}
 		}
 
-		afterAlternativePos := len(c.instructions)
+		// afterAlternativePos := len(c.instructions)
+		afterAlternativePos := len(c.currentInstructions())
 
 		// 更新临时参数
 		c.changeOperand(jumpNotTruthyPos, alternativePos)
 		c.changeOperand(jumpPos, afterAlternativePos)
+
+	// 用户自定义函数
+	case *ast.FunctionLiteral:
+		c.enterScope()
+
+		err := c.Compile(node.Body)
+		if err != nil {
+			return err
+		}
+
+		if c.lastInstructionIsPop() {
+			c.replaceLastPopWithReturn()
+		}
+
+		// 针对函数体为空的用户自定义函数，或者
+		// 最后一句为无返回值的语句，比如 `let` 语句。
+		// 注：
+		// 在书中的实践，如果函数无返回值，不是返回 Null，而是
+		// 使用单独的一个指令 OpReturn。
+		if !c.lastInstructionIs(code.OpReturnValue) {
+			c.emit(code.OpReturn)
+		}
+
+		numLocals := c.symbolTable.numDefinitions // 计算函数主体内的局部变量的数量
+		instructions := c.leaveScope()
+
+		compiledFn := &object.CompiledFunction{
+			Instructions: instructions,
+			NumLocals:    numLocals,
+		}
+
+		// 注：
+		// 书中的实践是把用户自定义函数的指令（[]byte）当作一个 object.CompiledFunction
+		// 对象存储在 c.constants 里，而不是合并到 instructions 里。
+		// 这么做主要是为了简化实现的方法，不过一般的实践是合并到 instructions 里。
+		c.emit(code.OpConstant, c.addConstant(compiledFn))
+
+	case *ast.ReturnStatement:
+		err := c.Compile(node.ReturnValue)
+		if err != nil {
+			return err
+		}
+
+		c.emit(code.OpReturnValue)
+
+	case *ast.CallExpression:
+		err := c.Compile(node.Function)
+		if err != nil {
+			return err
+		}
+
+		c.emit(code.OpCall)
 
 	// 标识符定义和赋值语句
 	case *ast.LetStatement:
@@ -146,7 +220,12 @@ func (c *Compiler) Compile(n ast.Node) error {
 		}
 
 		symbol := c.symbolTable.Define(node.Name.Value)
-		c.emit(code.OpSetGlobal, symbol.Index)
+
+		if symbol.Scope == GlobalScope { // ++
+			c.emit(code.OpSetGlobal, symbol.Index)
+		} else {
+			c.emit(code.OpSetLocal, symbol.Index) // ++
+		}
 
 	// 二元操作
 	case *ast.InfixExpression:
@@ -266,7 +345,11 @@ func (c *Compiler) Compile(n ast.Node) error {
 			return fmt.Errorf("undefined variable %s", node.Value)
 		}
 
-		c.emit(code.OpGetGlobal, symbol.Index)
+		if symbol.Scope == GlobalScope { // ++
+			c.emit(code.OpGetGlobal, symbol.Index)
+		} else {
+			c.emit(code.OpGetLocal, symbol.Index) // ++
+		}
 
 	// 字面量
 	case *ast.IntegerLiteral:
@@ -305,41 +388,102 @@ func (c *Compiler) emit(op code.Opcode, operands ...int) int {
 }
 
 func (c *Compiler) addInstruction(ins []byte) int {
-	posNewInstruction := len(c.instructions)
-	c.instructions = append(c.instructions, ins...)
+	// posNewInstruction := len(c.instructions)
+	// c.instructions = append(c.instructions, ins...)
+
+	posNewInstruction := len(c.currentInstructions())
+	updatedInstructions := append(c.currentInstructions(), ins...)
+	c.scopes[c.scopeIndex].instructions = updatedInstructions
+
 	return posNewInstruction
 }
 
 func (c *Compiler) setLastInstruction(op code.Opcode, pos int) {
-	previous := c.lastInstruction
+	// previous := c.lastInstruction
+	// last := EmittedInstruction{Opcode: op, Position: pos}
+	previous := c.scopes[c.scopeIndex].lastInstruction
 	last := EmittedInstruction{Opcode: op, Position: pos}
 
-	c.previousInstruction = previous
-	c.lastInstruction = last
+	// c.previousInstruction = previous
+	// c.lastInstruction = last
+	c.scopes[c.scopeIndex].previousInstruction = previous
+	c.scopes[c.scopeIndex].lastInstruction = last
 }
 
 func (c *Compiler) lastInstructionIsPop() bool {
-	return c.lastInstruction.Opcode == code.OpPop
+	// return c.lastInstruction.Opcode == code.OpPop
+	// return c.scopes[c.scopeIndex].lastInstruction.Opcode == code.OpPop
+	return c.lastInstructionIs(code.OpPop)
+}
+
+func (c *Compiler) lastInstructionIs(op code.Opcode) bool {
+	if len(c.currentInstructions()) == 0 {
+		return false
+	}
+	return c.scopes[c.scopeIndex].lastInstruction.Opcode == op
 }
 
 // 这个方法不能连续调用，因为 c.previousInstruction 无法恢复
 func (c *Compiler) removeLastPop() {
-	c.instructions = c.instructions[:c.lastInstruction.Position]
 	// 注：c.previousInstruction 没有被恢复
-	c.lastInstruction = c.previousInstruction
+	// c.instructions = c.instructions[:c.lastInstruction.Position]
+	// c.lastInstruction = c.previousInstruction
+
+	last := c.scopes[c.scopeIndex].lastInstruction
+	previous := c.scopes[c.scopeIndex].previousInstruction
+
+	c.scopes[c.scopeIndex].instructions = c.currentInstructions()[:last.Position]
+	c.scopes[c.scopeIndex].lastInstruction = previous
 }
 
 // 替换长度相同的指令（[]byte）
 func (c *Compiler) replaceInstruction(pos int, newInstruction []byte) {
+	// for i := 0; i < len(newInstruction); i++ {
+	// 	c.instructions[pos+i] = newInstruction[i]
+	// }
+
+	ins := c.currentInstructions()
 	for i := 0; i < len(newInstruction); i++ {
-		c.instructions[pos+i] = newInstruction[i]
+		ins[pos+i] = newInstruction[i]
 	}
 }
 
 // 替换指定指令（[]byte）的参数（仅限一个参数，且参数长度需要相同）
 func (c *Compiler) changeOperand(opPos int, operand int) {
-	op := code.Opcode(c.instructions[opPos])
+	// op := code.Opcode(c.instructions[opPos])
+	op := code.Opcode(c.currentInstructions()[opPos])
 	newInstruction := code.Make(op, operand)
 
 	c.replaceInstruction(opPos, newInstruction)
+}
+
+// 用于实现用户自定义函数的隠式 return
+func (c *Compiler) replaceLastPopWithReturn() {
+	lastPos := c.scopes[c.scopeIndex].lastInstruction.Position
+	c.replaceInstruction(lastPos, code.Make(code.OpReturnValue))
+	c.scopes[c.scopeIndex].lastInstruction.Opcode = code.OpReturnValue
+}
+
+// 压入一层 scope
+func (c *Compiler) enterScope() {
+	scope := CompilationScope{
+		instructions:        code.Instructions{},
+		lastInstruction:     EmittedInstruction{},
+		previousInstruction: EmittedInstruction{},
+	}
+	c.scopes = append(c.scopes, scope)
+	c.scopeIndex++
+
+	c.symbolTable = NewEnclosedSymbolTable(c.symbolTable)
+}
+
+// 弹出一层 scope，返回该层的指令（[]byte）
+func (c *Compiler) leaveScope() code.Instructions {
+	instructions := c.currentInstructions()
+	c.scopes = c.scopes[:len(c.scopes)-1]
+	c.scopeIndex--
+
+	c.symbolTable = c.symbolTable.Outer
+
+	return instructions
 }

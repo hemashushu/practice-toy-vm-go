@@ -8,6 +8,7 @@ import (
 	"hash/fnv"
 	"strings"
 	"toyvm/ast"
+	"toyvm/code"
 )
 
 type ObjectType string
@@ -20,10 +21,14 @@ const (
 	NULL_OBJ         = "NULL"
 	RETURN_VALUE_OBJ = "RETURN_VALUE" // 包裹其他 Object 的 Object，用于 return 语句
 	ERROR_OBJ        = "ERROR"
-	FUNCTION_OBJ     = "FUNCTION"
-	BUILTIN_OBJ      = "BUILTIN" // 内置函数
-	ARRAY_OBJ        = "ARRAY"   // 数组
-	HASH_OBJ         = "HASH"    // 映射表/Map
+
+	FUNCTION_OBJ = "FUNCTION" // 用户自定义函数
+	BUILTIN_OBJ  = "BUILTIN"  // 内置函数
+
+	ARRAY_OBJ = "ARRAY" // 数组
+	HASH_OBJ  = "HASH"  // 映射表/Map
+
+	COMPILED_FUNCTION_OBJ = "COMPILED_FUNCTION_OBJ" // 用于 bytecode 的用户自定义函数
 )
 
 type Object interface {
@@ -139,6 +144,18 @@ func (ao *Array) Inspect() string {
 	out.WriteString(strings.Join(elements, ", "))
 	out.WriteString("]")
 	return out.String()
+}
+
+// 用于 bytecode 的用户自定义函数
+
+type CompiledFunction struct {
+	Instructions code.Instructions // 用户自定义函数主体的指令（[]byte）
+	NumLocals    int               // 函数内局部变量的数量，用于在运算栈保留空间给局部变量使用
+}
+
+func (cf *CompiledFunction) Type() ObjectType { return COMPILED_FUNCTION_OBJ }
+func (cf *CompiledFunction) Inspect() string {
+	return fmt.Sprintf("CompiledFunction[%p]", cf)
 }
 
 // Map 的 Key，当前只支持 Boolean/Integer/String 作为 Key 的值

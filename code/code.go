@@ -42,9 +42,19 @@ const (
 	OpGetGlobal // 获取标识符的值
 	OpSetGlobal // 保存标识符的值
 
+	// 原书的实践是支持 String, Array, Map 等复杂数据类型，实际上可能
+	// 单单支持数字（包括 Integer, Boolean, Null）会比较简单，至于
+	// 复杂数据类型可以通过标准库实现。
 	OpArray // 生成 Array
 	OpHash  // 生成 Hash（Map）
-	OpIndex // Array 和 Hash 的索引
+	OpIndex // Array 和 Hash 的索引访问
+
+	OpCall        // 调用函数
+	OpReturnValue // 从函数返回，返回一个值
+	OpReturn      // 从函数返回，无返回值
+
+	OpGetLocal
+	OpSetLocal
 )
 
 // 操作码（指令）详细信息列表
@@ -114,7 +124,21 @@ var definitions = map[Opcode]*Definition{
 	// 参数：1. UInt16 键值对（Pair）的个数
 	OpHash: {"OpHash", []int{2}},
 
+	// Array 和 Hash 的索引访问
+	// 栈顶是 "索引值"，栈倒数第二个数是 "Array 或 Map 对象"
 	OpIndex: {"OpIndex", []int{}},
+
+	// 调用位于栈顶的 object.CompiledFunction
+	OpCall: {"OpCall", []int{}},
+
+	// 返回栈顶的一个数值
+	OpReturnValue: {"OpReturnValue", []int{}},
+
+	// 返回 vm.Null
+	OpReturn: {"OpReturn", []int{}},
+
+	OpGetLocal: {"OpGetLocal", []int{1}},
+	OpSetLocal: {"OpSetLocal", []int{1}},
 }
 
 // 编译
@@ -136,9 +160,12 @@ func Make(op Opcode, operands ...int) []byte {
 	offset := 1
 	for idx, operand := range operands {
 		width := def.OperandWidths[idx]
+
 		switch width {
 		case 2:
 			binary.BigEndian.PutUint16(instruction[offset:], uint16(operand))
+		case 1:
+			instruction[offset] = byte(operand)
 		}
 
 		offset += width
@@ -201,6 +228,8 @@ func ReadOperands(def *Definition, ins Instructions) ([]int, int) {
 		switch width {
 		case 2:
 			operands[i] = int(ReadUint16(ins[offset:]))
+		case 1:
+			operands[i] = int(ReadUint8(ins[offset:]))
 		}
 
 		offset += width
@@ -211,6 +240,10 @@ func ReadOperands(def *Definition, ins Instructions) ([]int, int) {
 
 func ReadUint16(ins Instructions) uint16 {
 	return binary.BigEndian.Uint16(ins)
+}
+
+func ReadUint8(ins Instructions) uint8 {
+	return uint8(ins[0])
 }
 
 // 根据操作码（指令）查找操作码详细信息

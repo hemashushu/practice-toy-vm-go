@@ -19,6 +19,11 @@ func TestMake(t *testing.T) {
 			[]int{},
 			[]byte{byte(OpAdd)},
 		},
+		{
+			OpGetLocal,
+			[]int{255},
+			[]byte{byte(OpGetLocal), 255},
+		},
 	}
 
 	for _, test := range tests {
@@ -42,6 +47,7 @@ func TestInstructionsString(t *testing.T) {
 	instructions := []Instructions{
 		// Make(OpConstant, 1),
 		Make(OpAdd),
+		Make(OpGetLocal, 1), // ++
 		Make(OpConstant, 2),
 		Make(OpConstant, 65535),
 	}
@@ -51,11 +57,17 @@ func TestInstructionsString(t *testing.T) {
 		// 0003 OpConstant 2
 		// 0006 OpConstant 65535
 		// `
+		//
+		// `0000 OpAdd
+		// 0001 OpConstant 2
+		// 0004 OpConstant 65535
+		// `
+		//
 		`0000 OpAdd
-0001 OpConstant 2
-0004 OpConstant 65535
+0001 OpGetLocal 1
+0003 OpConstant 2
+0006 OpConstant 65535
 `
-
 	concatted := Instructions{}
 	for _, ins := range instructions {
 		concatted = append(concatted, ins...)
@@ -73,6 +85,7 @@ func TestReadOperands(t *testing.T) {
 		bytesRead int
 	}{
 		{OpConstant, []int{65535}, 2},
+		{OpGetLocal, []int{255}, 1},
 	}
 	for _, test := range tests {
 		instruction := Make(test.op, test.operands...)
@@ -82,12 +95,12 @@ func TestReadOperands(t *testing.T) {
 		}
 		operandsRead, n := ReadOperands(def, instruction[1:])
 		if n != test.bytesRead {
-			t.Fatalf("n wrong. want=%d, got=%d", test.bytesRead, n)
+			t.Fatalf("bytesRead wrong, expected %d, actual %d", test.bytesRead, n)
 
 		}
 		for i, want := range test.operands {
 			if operandsRead[i] != want {
-				t.Errorf("operand wrong. want=%d, got=%d", want, operandsRead[i])
+				t.Errorf("operand wrong, expected %d, actual %d", want, operandsRead[i])
 			}
 		}
 	}
