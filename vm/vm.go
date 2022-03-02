@@ -39,7 +39,9 @@ func New(bytecode *compiler.Bytecode) *VM {
 	mainFn := &object.CompiledFunction{
 		Instructions: bytecode.Instructions,
 	}
-	mainFrame := NewFrame(mainFn, 0)
+	mainClosure := &object.Closure{Fn: mainFn} // ++
+	// mainFrame := NewFrame(mainFn, 0)
+	mainFrame := NewFrame(mainClosure, 0)
 
 	frames := make([]*Frame, MaxFrames)
 	frames[0] = mainFrame
@@ -105,7 +107,7 @@ func (vm *VM) Run() error {
 		// decode
 		switch op {
 
-		// 定义常量
+		// 从 global 读取常量，并压入运算栈
 		case code.OpConstant:
 			constIndex := code.ReadUint16(ins[ip+1:]) // code.ReadUint16(vm.instructions[ip+1:])
 			vm.currentFrame().ip += 2                 // ip += 2
@@ -114,6 +116,17 @@ func (vm *VM) Run() error {
 			err := vm.push(vm.constants[constIndex])
 			if err != nil {
 				return err
+			}
+
+		// 从 global 读取（带闭包的）函数字面量，并压入运算栈
+		case code.OpClosure:
+			constIndex := code.ReadUint16(ins[ip+1:]) // 函数字面量的位置
+			_ = code.ReadUint8(ins[ip+3:])            // 函数捕获局部变量的数量
+			vm.currentFrame().ip += 3
+
+			err := vm.pushClosure(int(constIndex))
+			if err != nil {
+				return nil
 			}
 
 		// 弹出栈顶的最后一个值，用于清理语句执行后的 stack
@@ -339,6 +352,17 @@ func (vm *VM) LastPoppedStackElem() object.Object {
 	return vm.stack[vm.sp]
 }
 
+func (vm *VM) pushClosure(constIndex int) error {
+	constant := vm.constants[constIndex]
+	function, ok := constant.(*object.CompiledFunction)
+	if !ok {
+		return fmt.Errorf("not a function: %+v", constant)
+	}
+
+	closure := &object.Closure{Fn: function}
+	return vm.push(closure)
+}
+
 func (vm *VM) executeBinaryOperation(op code.Opcode) error {
 	right := vm.pop() // pop 的顺序应该与 push 的相反
 	left := vm.pop()
@@ -558,8 +582,10 @@ func (vm *VM) executeHashIndex(hash, index object.Object) error {
 func (vm *VM) executeCall(numArgs int) error {
 	callee := vm.stack[vm.sp-1-numArgs]
 	switch callee := callee.(type) {
-	case *object.CompiledFunction:
-		return vm.callFunction(callee, numArgs)
+	// case *object.CompiledFunction:
+	// 	return vm.callFunction(callee, numArgs)
+	case *object.Closure:
+		return vm.callClosure(callee, numArgs)
 	case *object.Builtin:
 		return vm.callBuiltin(callee, numArgs)
 	default:
@@ -567,8 +593,9 @@ func (vm *VM) executeCall(numArgs int) error {
 	}
 }
 
-// func (vm *VM) callFunction(numArgs int) error {
-func (vm *VM) callFunction(fn *object.CompiledFunction, numArgs int) error {
+// func (vm *VM) callFunction(numArgs int) error { // **
+// func (vm *VM) callFunction(fn *object.CompiledFunction, numArgs int) error {
+func (vm *VM) callClosure(cl *object.Closure, numArgs int) error {
 	// 注：
 	// 调用帧从 `vm.sp` 开始
 	// 当函数有参数时，运算帧的前 numArgs 个值都是实参
@@ -584,14 +611,14 @@ func (vm *VM) callFunction(fn *object.CompiledFunction, numArgs int) error {
 	// 检查实参的数量
 	// 注：
 	// 也可以在编译阶段检查
-	if numArgs != fn.NumParameters {
+	if numArgs != cl.Fn.NumParameters {
 		return fmt.Errorf("wrong number of arguments, expected %d, actual %d",
-			fn.NumParameters, numArgs)
+			cl.Fn.NumParameters, numArgs)
 	}
 
-	frame := NewFrame(fn, vm.sp-numArgs)
-	vm.pushFrame(frame)                      // 压入新的调用帧
-	vm.sp = frame.basePointer + fn.NumLocals // 保留空间给（自定义函数的）局部变量
+	frame := NewFrame(cl, vm.sp-numArgs)
+	vm.pushFrame(frame)                         // 压入新的调用帧
+	vm.sp = frame.basePointer + cl.Fn.NumLocals // 保留空间给（自定义函数的）局部变量
 	return nil
 }
 

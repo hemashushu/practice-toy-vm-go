@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strings"
-	"toyvm/ast"
 	"toyvm/code"
 )
 
@@ -29,6 +28,7 @@ const (
 	HASH_OBJ  = "HASH"  // 映射表/Map
 
 	COMPILED_FUNCTION_OBJ = "COMPILED_FUNCTION_OBJ" // 用于 bytecode 的用户自定义函数
+	CLOSURE_OBJ           = "CLOSURE"
 )
 
 type Object interface {
@@ -94,29 +94,43 @@ type Error struct {
 func (e *Error) Type() ObjectType { return ERROR_OBJ }
 func (e *Error) Inspect() string  { return "ERROR: " + e.Message }
 
-type Function struct {
-	Parameters []*ast.Identifier
-	Body       *ast.BlockStatement
-	Env        *Environment // 记录定义函数时的 `环境`，执行 Body 时使用这个 `环境`，实现静态范围 static scope
+// 函数 // --
+//
+// type Function struct {
+// 	Parameters []*ast.Identifier
+// 	Body       *ast.BlockStatement
+// 	Env        *Environment // 记录定义函数时的 `环境`，执行 Body 时使用这个 `环境`，实现静态范围 static scope
+// }
+//
+// func (f *Function) Type() ObjectType { return FUNCTION_OBJ }
+// func (f *Function) Inspect() string {
+// 	var out bytes.Buffer
+// 	params := []string{}
+//
+// 	for _, p := range f.Parameters {
+// 		params = append(params, p.String())
+// 	}
+//
+// 	out.WriteString("fn")
+// 	out.WriteString("(")
+// 	out.WriteString(strings.Join(params, ", "))
+// 	out.WriteString(") {\n")
+// 	out.WriteString(f.Body.String())
+// 	out.WriteString("\n}")
+//
+// 	return out.String()
+// }
+
+// 用于编译的用户自定义函数
+type CompiledFunction struct {
+	Instructions  code.Instructions // 用户自定义函数主体的指令（[]byte）
+	NumLocals     int               // 函数内局部变量的数量，用于在运算栈保留空间给局部变量使用
+	NumParameters int               // 参数的个数
 }
 
-func (f *Function) Type() ObjectType { return FUNCTION_OBJ }
-func (f *Function) Inspect() string {
-	var out bytes.Buffer
-	params := []string{}
-
-	for _, p := range f.Parameters {
-		params = append(params, p.String())
-	}
-
-	out.WriteString("fn")
-	out.WriteString("(")
-	out.WriteString(strings.Join(params, ", "))
-	out.WriteString(") {\n")
-	out.WriteString(f.Body.String())
-	out.WriteString("\n}")
-
-	return out.String()
+func (cf *CompiledFunction) Type() ObjectType { return COMPILED_FUNCTION_OBJ }
+func (cf *CompiledFunction) Inspect() string {
+	return fmt.Sprintf("CompiledFunction[%p]", cf)
 }
 
 // 内置函数
@@ -129,6 +143,18 @@ type Builtin struct {
 func (b *Builtin) Type() ObjectType { return BUILTIN_OBJ }
 func (b *Builtin) Inspect() string  { return "builtin function" }
 
+// 闭包
+type Closure struct {
+	Fn   *CompiledFunction
+	Free []Object // 被捕捉的局部变量，相当于 interpreter 当中的 Environment
+}
+
+func (c *Closure) Type() ObjectType { return CLOSURE_OBJ }
+func (c *Closure) Inspect() string {
+	return fmt.Sprintf("Closure[%p]", c)
+}
+
+// 列表
 type Array struct {
 	Elements []Object
 }
@@ -144,19 +170,6 @@ func (ao *Array) Inspect() string {
 	out.WriteString(strings.Join(elements, ", "))
 	out.WriteString("]")
 	return out.String()
-}
-
-// 用于 bytecode 的用户自定义函数
-
-type CompiledFunction struct {
-	Instructions  code.Instructions // 用户自定义函数主体的指令（[]byte）
-	NumLocals     int               // 函数内局部变量的数量，用于在运算栈保留空间给局部变量使用
-	NumParameters int               // 参数的个数
-}
-
-func (cf *CompiledFunction) Type() ObjectType { return COMPILED_FUNCTION_OBJ }
-func (cf *CompiledFunction) Inspect() string {
-	return fmt.Sprintf("CompiledFunction[%p]", cf)
 }
 
 // Map 的 Key，当前只支持 Boolean/Integer/String 作为 Key 的值

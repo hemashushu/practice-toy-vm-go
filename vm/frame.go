@@ -9,19 +9,24 @@ import (
 // call frame, stack frame
 // 对应着解析器的函数 activation record（在解析器里一般使用 Environment 实现）
 type Frame struct {
-	fn          *object.CompiledFunction
+	// fn          *object.CompiledFunction // **
+	cl          *object.Closure
 	ip          int
 	basePointer int // BP/帧指针，进入调用帧之前，运算栈的栈顶位置（指针）
 }
 
-func NewFrame(fn *object.CompiledFunction, basePointer int) *Frame {
+func NewFrame(
+	// fn *object.CompiledFunction, // **
+	cl *object.Closure,
+	basePointer int) *Frame {
 	return &Frame{
-		fn:          fn,
+		// fn:          fn, // **
+		cl:          cl,
 		ip:          -1,
 		basePointer: basePointer,
 	}
 }
 
 func (f *Frame) Instructions() code.Instructions {
-	return f.fn.Instructions
+	return f.cl.Fn.Instructions
 }

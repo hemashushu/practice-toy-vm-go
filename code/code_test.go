@@ -24,6 +24,11 @@ func TestMake(t *testing.T) {
 			[]int{255},
 			[]byte{byte(OpGetLocal), 255},
 		},
+		{
+			OpClosure,
+			[]int{65534, 255},
+			[]byte{byte(OpClosure), 255, 254, 255},
+		},
 	}
 
 	for _, test := range tests {
@@ -45,28 +50,84 @@ func TestMake(t *testing.T) {
 // 测试 ”反编译“（将字节码的指令部分，即一个 byte 数组，转为文本）
 func TestInstructionsString(t *testing.T) {
 	instructions := []Instructions{
-		// Make(OpConstant, 1),
-		Make(OpAdd),
-		Make(OpGetLocal, 1), // ++
+		Make(OpConstant, 1),
 		Make(OpConstant, 2),
 		Make(OpConstant, 65535),
 	}
 
 	expected :=
-		//`0000 OpConstant 1
-		// 0003 OpConstant 2
-		// 0006 OpConstant 65535
-		// `
-		//
-		// `0000 OpAdd
-		// 0001 OpConstant 2
-		// 0004 OpConstant 65535
-		// `
-		//
+		`0000 OpConstant 1
+0003 OpConstant 2
+0006 OpConstant 65535
+`
+
+	concatted := Instructions{}
+	for _, ins := range instructions {
+		concatted = append(concatted, ins...)
+	}
+	if concatted.String() != expected {
+		t.Errorf("instructions wrongly formatted, expected %q, actual %q",
+			expected, concatted.String())
+	}
+}
+
+func TestInstructionsString2(t *testing.T) {
+	instructions := []Instructions{
+		Make(OpAdd),
+		Make(OpConstant, 2),
+		Make(OpConstant, 65535),
+	}
+
+	expected := `0000 OpAdd
+0001 OpConstant 2
+0004 OpConstant 65535
+`
+
+	concatted := Instructions{}
+	for _, ins := range instructions {
+		concatted = append(concatted, ins...)
+	}
+	if concatted.String() != expected {
+		t.Errorf("instructions wrongly formatted, expected %q, actual %q",
+			expected, concatted.String())
+	}
+}
+
+func TestInstructionsString3(t *testing.T) {
+	instructions := []Instructions{
+		Make(OpAdd),
+		Make(OpGetLocal, 1),
+		Make(OpConstant, 2),
+		Make(OpConstant, 65535),
+	}
+
+	expected :=
 		`0000 OpAdd
 0001 OpGetLocal 1
 0003 OpConstant 2
 0006 OpConstant 65535
+`
+	concatted := Instructions{}
+	for _, ins := range instructions {
+		concatted = append(concatted, ins...)
+	}
+	if concatted.String() != expected {
+		t.Errorf("instructions wrongly formatted, expected %q, actual %q",
+			expected, concatted.String())
+	}
+}
+
+func TestInstructionsString4(t *testing.T) {
+	instructions := []Instructions{
+		Make(OpConstant, 65535),
+		Make(OpClosure, 65535, 255),
+		Make(OpConstant, 2),
+	}
+
+	expected :=
+		`0000 OpConstant 65535
+0003 OpClosure 65535 255
+0007 OpConstant 2
 `
 	concatted := Instructions{}
 	for _, ins := range instructions {
@@ -86,6 +147,7 @@ func TestReadOperands(t *testing.T) {
 	}{
 		{OpConstant, []int{65535}, 2},
 		{OpGetLocal, []int{255}, 1},
+		{OpClosure, []int{65535, 255}, 3},
 	}
 	for _, test := range tests {
 		instruction := Make(test.op, test.operands...)

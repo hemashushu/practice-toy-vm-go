@@ -207,7 +207,9 @@ func (c *Compiler) Compile(n ast.Node) error {
 		// 书中的实践是把用户自定义函数的指令（[]byte）当作一个 object.CompiledFunction
 		// 对象存储在 c.constants 里，而不是合并到 instructions 里。
 		// 这么做主要是为了简化实现的方法，不过一般的实践是合并到 instructions 里。
-		c.emit(code.OpConstant, c.addConstant(compiledFn))
+		// c.emit(code.OpConstant, c.addConstant(compiledFn)) // --
+		fnIndex := c.addConstant(compiledFn)
+		c.emit(code.OpClosure, fnIndex, 0)
 
 	case *ast.ReturnStatement:
 		err := c.Compile(node.ReturnValue)

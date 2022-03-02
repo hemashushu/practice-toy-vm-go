@@ -17,7 +17,7 @@ type Definition struct {
 
 // 操作码（指令）列表，可视为 "函数名称列表"。
 const (
-	OpConstant Opcode = iota // 定义常量
+	OpConstant Opcode = iota // 从 global 读取常量，并压入运算栈
 	OpPop                    // 弹出语句最后的值
 
 	OpAdd // 加
@@ -57,12 +57,13 @@ const (
 	OpSetLocal // 写局部变量
 
 	OpGetBuiltin // 获取内置函数
+	OpClosure    // 创建闭包
 )
 
 // 操作码（指令）详细信息列表
 var definitions = map[Opcode]*Definition{
 	// OpConstant
-	// 作用：定义常量
+	// 作用：从 global 读取常量，并压入运算栈
 	// 参数：1. UInt16，记录数值在常量列表中的地址
 	OpConstant: {"OpConstant", []int{2}},
 
@@ -145,7 +146,14 @@ var definitions = map[Opcode]*Definition{
 	OpGetLocal: {"OpGetLocal", []int{1}},
 	OpSetLocal: {"OpSetLocal", []int{1}},
 
+	// 获取内置函数
+	// 参数：1. UInt8 内置函数的索引值
 	OpGetBuiltin: {"OpGetBuiltin", []int{1}},
+
+	// 创建闭包
+	// 参数：1. UInt16 constant index，指向目标 *object.CompiledFunction
+	// 参数：1. UInt8 闭包局部变量的数量
+	OpClosure: {"OpClosure", []int{2, 1}},
 }
 
 // 编译
@@ -220,6 +228,8 @@ func (ins Instructions) fmtInstruction(def *Definition, operands []int) string {
 		return fmt.Sprintf("%s", def.Name)
 	case 1:
 		return fmt.Sprintf("%s %d", def.Name, operands[0])
+	case 2:
+		return fmt.Sprintf("%s %d %d", def.Name, operands[0], operands[1])
 	}
 
 	return fmt.Sprintf("ERROR: unhandled operandCount for %s\n", def.Name)
