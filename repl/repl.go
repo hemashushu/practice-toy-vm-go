@@ -15,9 +15,10 @@ const PROMPT = ">> "
 
 func Start(in io.Reader, out io.Writer) {
 	// 编译器和 VM 的状态
-	constants := []object.Object{}
 	symbolTable := compiler.NewSymbolTable()
 	globals := make([]object.Object, vm.GlobalsSize)
+
+	constants := []object.Object{} // 值会被改变
 
 	scanner := bufio.NewScanner(in)
 	for {
@@ -45,7 +46,10 @@ func Start(in io.Reader, out io.Writer) {
 			continue
 		}
 
-		machine := vm.NewWithGlobalsStore(comp.Bytecode(), globals)
+		code := comp.Bytecode()
+		constants = code.Constants // 更新值
+
+		machine := vm.NewWithGlobalsStore(code, globals)
 		err = machine.Run()
 		if err != nil {
 			fmt.Fprintf(out, "Executing bytecode failed: %s\n", err)

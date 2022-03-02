@@ -113,7 +113,7 @@ var definitions = map[Opcode]*Definition{
 
 	// 保存标识符的值
 	// 弹出栈顶的值，并把值保存到 global 列表
-	// 参数：1. UInt16 目标位置
+	// 参数：1. UInt16 目标在 global 列表里的位置
 	OpSetGlobal: {"OpSetGlobal", []int{2}},
 
 	// 使用栈的前 N 项数值生成一个 Array 对象
@@ -129,7 +129,8 @@ var definitions = map[Opcode]*Definition{
 	OpIndex: {"OpIndex", []int{}},
 
 	// 调用位于栈顶的 object.CompiledFunction
-	OpCall: {"OpCall", []int{}},
+	// 参数：1. UInt8 调用函数时实参的数量
+	OpCall: {"OpCall", []int{1}},
 
 	// 返回栈顶的一个数值
 	OpReturnValue: {"OpReturnValue", []int{}},
@@ -137,6 +138,8 @@ var definitions = map[Opcode]*Definition{
 	// 返回 vm.Null
 	OpReturn: {"OpReturn", []int{}},
 
+	// 读写局部变量
+	// 参数：1. UInt8 目标在运算栈中的位置
 	OpGetLocal: {"OpGetLocal", []int{1}},
 	OpSetLocal: {"OpSetLocal", []int{1}},
 }

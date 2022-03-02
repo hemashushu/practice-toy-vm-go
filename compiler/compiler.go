@@ -164,6 +164,11 @@ func (c *Compiler) Compile(n ast.Node) error {
 	case *ast.FunctionLiteral:
 		c.enterScope()
 
+		// 添加形参（作为局部变量）
+		for _, p := range node.Parameters {
+			c.symbolTable.Define(p.Value)
+		}
+
 		err := c.Compile(node.Body)
 		if err != nil {
 			return err
@@ -186,8 +191,9 @@ func (c *Compiler) Compile(n ast.Node) error {
 		instructions := c.leaveScope()
 
 		compiledFn := &object.CompiledFunction{
-			Instructions: instructions,
-			NumLocals:    numLocals,
+			Instructions:  instructions,
+			NumLocals:     numLocals,
+			NumParameters: len(node.Parameters),
 		}
 
 		// 注：
@@ -210,7 +216,18 @@ func (c *Compiler) Compile(n ast.Node) error {
 			return err
 		}
 
-		c.emit(code.OpCall)
+		// 注：
+		// 这里应该加上实参数量的检查
+
+		// 压入实参
+		for _, a := range node.Arguments {
+			err := c.Compile(a)
+			if err != nil {
+				return err
+			}
+		}
+
+		c.emit(code.OpCall, len(node.Arguments))
 
 	// 标识符定义和赋值语句
 	case *ast.LetStatement:

@@ -149,8 +149,9 @@ func (ao *Array) Inspect() string {
 // 用于 bytecode 的用户自定义函数
 
 type CompiledFunction struct {
-	Instructions code.Instructions // 用户自定义函数主体的指令（[]byte）
-	NumLocals    int               // 函数内局部变量的数量，用于在运算栈保留空间给局部变量使用
+	Instructions  code.Instructions // 用户自定义函数主体的指令（[]byte）
+	NumLocals     int               // 函数内局部变量的数量，用于在运算栈保留空间给局部变量使用
+	NumParameters int               // 参数的个数
 }
 
 func (cf *CompiledFunction) Type() ObjectType { return COMPILED_FUNCTION_OBJ }

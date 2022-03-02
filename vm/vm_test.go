@@ -457,3 +457,109 @@ func TestCallingFunctionsWithBindings(t *testing.T) {
 	}
 	runVmTests(t, tests)
 }
+
+func TestCallingFunctionsWithArgumentsAndBindings(t *testing.T) {
+	tests := []vmTestCase{
+		{
+			input: `
+			let identity = fn(a) { a; };
+			identity(4);
+			`,
+			expected: 4,
+		},
+		{
+			input: `
+			let sum = fn(a, b) { a + b; };
+			sum(1, 2);
+			`,
+			expected: 3,
+		},
+	}
+	runVmTests(t, tests)
+}
+
+func TestCallingFunctionsWithArgumentsAndBindings2(t *testing.T) {
+	tests := []vmTestCase{
+
+		{
+			input: `
+			let sum = fn(a, b) {
+				let c = a + b;
+				c;
+			};
+			sum(1, 2);
+			`,
+			expected: 3,
+		},
+		{
+			input: `
+			let sum = fn(a, b) {
+				let c = a + b;
+				c;
+			};
+			sum(1, 2) + sum(3, 4);`,
+			expected: 10,
+		},
+		{
+			input: `
+			let sum = fn(a, b) {
+				let c = a + b;
+				c;
+			};
+			let outer = fn() {
+				sum(1, 2) + sum(3, 4);
+			};
+			outer();
+			`,
+			expected: 10,
+		},
+		{
+			input: `
+			let globalNum = 10;
+			let sum = fn(a, b) {
+				let c = a + b;
+				c + globalNum;
+			};
+			let outer = fn() {
+				sum(1, 2) + sum(3, 4) + globalNum; // 13 + 17 + 10
+			};
+			outer() + globalNum; // 40 + 10
+			`,
+			expected: 50,
+		},
+	}
+	runVmTests(t, tests)
+}
+
+func TestCallingFunctionsWithWrongArguments(t *testing.T) {
+	tests := []vmTestCase{
+		{
+			input:    `fn() { 1; }(1);`,
+			expected: `wrong number of arguments, expected 0, actual 1`,
+		},
+		{
+			input:    `fn(a) { a; }();`,
+			expected: `wrong number of arguments, expected 1, actual 0`,
+		},
+		{
+			input:    `fn(a, b) { a + b; }(1);`,
+			expected: `wrong number of arguments, expected 2, actual 1`,
+		},
+	}
+	for _, test := range tests {
+		program := parse(test.input)
+		comp := compiler.New()
+		err := comp.Compile(program)
+		if err != nil {
+			t.Fatalf("compiler error: %s", err)
+		}
+		vm := New(comp.Bytecode())
+		err = vm.Run()
+		if err == nil {
+			t.Fatalf("expected VM error but resulted in none.")
+		}
+		if err.Error() != test.expected {
+			t.Fatalf("wrong VM error: expected %q, actual %q", test.expected, err)
+		}
+	}
+}

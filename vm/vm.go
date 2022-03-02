@@ -140,14 +140,13 @@ func (vm *VM) Run() error {
 
 		// 函数调用
 		case code.OpCall:
-			fn, ok := vm.stack[vm.sp-1].(*object.CompiledFunction)
-			if !ok {
-				return fmt.Errorf("calling non-function")
-			}
+			numArgs := code.ReadUint8(ins[ip+1:]) // 参数的数量
+			vm.currentFrame().ip += 1
 
-			frame := NewFrame(fn, vm.sp)
-			vm.pushFrame(frame)                      // 压入新的调用帧
-			vm.sp = frame.basePointer + fn.NumLocals // 保留空间给（自定义函数的）局部变量
+			err := vm.callFunction(int(numArgs))
+			if err != nil {
+				return err
+			}
 
 		case code.OpReturnValue:
 			returnValue := vm.pop()
@@ -541,4 +540,29 @@ func (vm *VM) executeHashIndex(hash, index object.Object) error {
 		return vm.push(Null)
 	}
 	return vm.push(pair.Value)
+}
+
+func (vm *VM) callFunction(numArgs int) error {
+	// 注：
+	// 调用帧从 `vm.sp` 开始
+	// 当函数有参数时，运算帧的前 numArgs 个值都是实参
+	// 所以调用帧的开始位置修正为 `vm.sp - numArgs`
+	// CompiledFunction 的位置则是 `vm.sp - numArgs - 1`
+	fn, ok := vm.stack[vm.sp-numArgs-1].(*object.CompiledFunction) // **
+	if !ok {
+		return fmt.Errorf("calling non-function")
+	}
+
+	// 检查实参的数量
+	// 注：
+	// 也可以在编译阶段检查
+	if numArgs != fn.NumParameters {
+		return fmt.Errorf("wrong number of arguments, expected %d, actual %d",
+			fn.NumParameters, numArgs)
+	}
+
+	frame := NewFrame(fn, vm.sp-numArgs)
+	vm.pushFrame(frame)                      // 压入新的调用帧
+	vm.sp = frame.basePointer + fn.NumLocals // 保留空间给（自定义函数的）局部变量
+	return nil
 }
