@@ -18,7 +18,13 @@ func Start(in io.Reader, out io.Writer) {
 	symbolTable := compiler.NewSymbolTable()
 	globals := make([]object.Object, vm.GlobalsSize)
 
-	constants := []object.Object{} // 值会被改变
+	// 添加内置函数
+	for i, v := range object.Builtins {
+		symbolTable.DefineBuiltin(i, v.Name)
+	}
+
+	// 注：constants 这个变量会被改变
+	constants := []object.Object{}
 
 	scanner := bufio.NewScanner(in)
 	for {

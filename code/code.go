@@ -53,8 +53,10 @@ const (
 	OpReturnValue // 从函数返回，返回一个值
 	OpReturn      // 从函数返回，无返回值
 
-	OpGetLocal
-	OpSetLocal
+	OpGetLocal // 读局部变量（包括函数参数）
+	OpSetLocal // 写局部变量
+
+	OpGetBuiltin // 获取内置函数
 )
 
 // 操作码（指令）详细信息列表
@@ -142,6 +144,8 @@ var definitions = map[Opcode]*Definition{
 	// 参数：1. UInt8 目标在运算栈中的位置
 	OpGetLocal: {"OpGetLocal", []int{1}},
 	OpSetLocal: {"OpSetLocal", []int{1}},
+
+	OpGetBuiltin: {"OpGetBuiltin", []int{1}},
 }
 
 // 编译

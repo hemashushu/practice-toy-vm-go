@@ -174,3 +174,35 @@ func TestDefine2(t *testing.T) {
 		t.Errorf("expected f %+v, actual %+v", expected["f"], f)
 	}
 }
+
+func TestDefineResolveBuiltins(t *testing.T) {
+	global := NewSymbolTable()
+	firstLocal := NewEnclosedSymbolTable(global)
+	secondLocal := NewEnclosedSymbolTable(firstLocal)
+
+	expected := []Symbol{
+		Symbol{Name: "a", Scope: BuiltinScope, Index: 0},
+		Symbol{Name: "c", Scope: BuiltinScope, Index: 1},
+		Symbol{Name: "e", Scope: BuiltinScope, Index: 2},
+		Symbol{Name: "f", Scope: BuiltinScope, Index: 3},
+	}
+
+	for i, v := range expected {
+		global.DefineBuiltin(i, v.Name)
+	}
+
+	for _, table := range []*SymbolTable{global, firstLocal, secondLocal} {
+		for _, sym := range expected {
+			result, ok := table.Resolve(sym.Name)
+			if !ok {
+				t.Errorf("name %s not resolvable", sym.Name)
+				continue
+			}
+
+			if result != sym {
+				t.Errorf("expected %s to resolve to %+v, actual %+v",
+					sym.Name, sym, result)
+			}
+		}
+	}
+}

@@ -89,7 +89,7 @@ func testExpectedObject(
 			}
 		}
 
-	case map[object.HashKey]int64:
+	case map[object.HashKey]int64: // 添加对 Hash(map) 的支持
 		hash, ok := actual.(*object.Hash)
 		if !ok {
 			t.Errorf("object is not Hash, actual %T, %+v", actual, actual)
@@ -115,6 +115,17 @@ func testExpectedObject(
 	case *object.Null:
 		if actual != Null {
 			t.Errorf("expected object Null, actual: %T, %+v", actual, actual)
+		}
+
+	case *object.Error: // 添加对 Error 的支持
+		errObj, ok := actual.(*object.Error)
+		if !ok {
+			t.Errorf("object is not Error: %T, %+v", actual, actual)
+			return
+		}
+		if errObj.Message != expected.Message {
+			t.Errorf("wrong error message. expected %q, actual %q",
+				expected.Message, errObj.Message)
 		}
 	}
 }
@@ -562,4 +573,50 @@ func TestCallingFunctionsWithWrongArguments(t *testing.T) {
 			t.Fatalf("wrong VM error: expected %q, actual %q", test.expected, err)
 		}
 	}
+}
+
+func TestBuiltinFunctions(t *testing.T) {
+	tests := []vmTestCase{
+		{`len("")`, 0},
+		{`len("four")`, 4},
+		{`len("hello world")`, 11},
+		{
+			`len(1)`,
+			&object.Error{
+				Message: "argument type to `len` not supported, actual INTEGER",
+			},
+		},
+		{`len("one", "two")`,
+			&object.Error{
+				Message: "wrong number of arguments, expected 1, actual 2",
+			},
+		},
+		{`len([1, 2, 3])`, 3},
+		{`len([])`, 0},
+		{`puts("hello", "world!")`, Null},
+		{`first([1, 2, 3])`, 1},
+		{`first([])`, Null},
+		{`first(1)`,
+			&object.Error{
+				Message: "argument type to `first` must be ARRAY, actual INTEGER",
+			},
+		},
+		{`last([1, 2, 3])`, 3},
+		{`last([])`, Null},
+		{`last(1)`,
+			&object.Error{
+				Message: "argument type to `last` must be ARRAY, actual INTEGER",
+			},
+		},
+		{`rest([1, 2, 3])`, []int{2, 3}},
+		{`rest([])`, Null},
+		{`push([], 1)`, []int{1}},
+		{`push(1, 1)`,
+			&object.Error{
+				Message: "argument type to `push` must be ARRAY, actual INTEGER",
+			},
+		},
+	}
+
+	runVmTests(t, tests)
 }

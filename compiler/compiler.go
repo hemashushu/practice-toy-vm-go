@@ -39,9 +39,16 @@ func New() *Compiler {
 		previousInstruction: EmittedInstruction{},
 	}
 
+	symbolTable := NewSymbolTable()
+
+	// 把内置函数以编号的方式加入到 global symbol table
+	for i, v := range object.Builtins {
+		symbolTable.DefineBuiltin(i, v.Name)
+	}
+
 	return &Compiler{
 		constants:   []object.Object{},
-		symbolTable: NewSymbolTable(),
+		symbolTable: symbolTable, // NewSymbolTable(), // **
 
 		// instructions:        code.Instructions{},
 		// lastInstruction:     EmittedInstruction{},
@@ -362,11 +369,13 @@ func (c *Compiler) Compile(n ast.Node) error {
 			return fmt.Errorf("undefined variable %s", node.Value)
 		}
 
-		if symbol.Scope == GlobalScope { // ++
-			c.emit(code.OpGetGlobal, symbol.Index)
-		} else {
-			c.emit(code.OpGetLocal, symbol.Index) // ++
-		}
+		// if symbol.Scope == GlobalScope { // ++
+		// 	c.emit(code.OpGetGlobal, symbol.Index)
+		// } else {
+		// 	c.emit(code.OpGetLocal, symbol.Index) // ++
+		// }
+
+		c.loadSymbol(symbol)
 
 	// 字面量
 	case *ast.IntegerLiteral:
@@ -393,6 +402,17 @@ func (c *Compiler) addConstant(obj object.Object) int {
 	idx := len(c.constants)
 	c.constants = append(c.constants, obj)
 	return idx
+}
+
+func (c *Compiler) loadSymbol(s Symbol) {
+	switch s.Scope {
+	case GlobalScope:
+		c.emit(code.OpGetGlobal, s.Index)
+	case LocalScope:
+		c.emit(code.OpGetLocal, s.Index)
+	case BuiltinScope:
+		c.emit(code.OpGetBuiltin, s.Index)
+	}
 }
 
 // 生成指令字节，返回该指令在字节中的位置值

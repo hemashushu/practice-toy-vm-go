@@ -1,0 +1,19 @@
+let array = [1,2,3,44,55];
+
+let reverse = fn(a) {
+    if (len(a) != 5) {
+        puts("array must 5 elements");
+        return [];
+    }
+
+    return [
+        a[4],
+        a[3],
+        a[2],
+        a[1],
+        a[0]
+    ];
+}
+
+let r = reverse(array);
+puts(r);

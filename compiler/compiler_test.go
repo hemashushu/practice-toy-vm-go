@@ -954,3 +954,43 @@ func TestFunctionCalls3(t *testing.T) {
 
 	runCompilerTests(t, tests)
 }
+
+func TestBuiltins(t *testing.T) {
+	tests := []compilerTestCase{
+		{
+			input: `
+			len([]);
+			push([], 1);
+			`,
+			expectedConstants: []interface{}{1},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpGetBuiltin, 0), // 获取 0 号内置函数
+				code.Make(code.OpArray, 0),      // 实参 0
+				code.Make(code.OpCall, 1),       // call，实参数量为 1
+				code.Make(code.OpPop),           // ;
+				code.Make(code.OpGetBuiltin, 5), // 获取 5 号内置函数
+				code.Make(code.OpArray, 0),      // 实参 0
+				code.Make(code.OpConstant, 0),   // 实参 1
+				code.Make(code.OpCall, 2),       // call，实参数量为 2
+				code.Make(code.OpPop),           // ;
+			},
+		},
+		{
+			input: `fn() { len([]) }`,
+			expectedConstants: []interface{}{
+				[]code.Instructions{
+					code.Make(code.OpGetBuiltin, 0),
+					code.Make(code.OpArray, 0),
+					code.Make(code.OpCall, 1),
+					code.Make(code.OpReturnValue),
+				},
+			},
+			expectedInstructions: []code.Instructions{
+				code.Make(code.OpConstant, 0),
+				code.Make(code.OpPop),
+			},
+		},
+	}
+
+	runCompilerTests(t, tests)
+}

@@ -143,7 +143,8 @@ func (vm *VM) Run() error {
 			numArgs := code.ReadUint8(ins[ip+1:]) // 参数的数量
 			vm.currentFrame().ip += 1
 
-			err := vm.callFunction(int(numArgs))
+			// err := vm.callFunction(int(numArgs)) // **
+			err := vm.executeCall(int(numArgs))
 			if err != nil {
 				return err
 			}
@@ -218,6 +219,18 @@ func (vm *VM) Run() error {
 			vm.currentFrame().ip += 2
 
 			err := vm.push(vm.globals[globalIndex])
+			if err != nil {
+				return err
+			}
+
+		// 获取内置函数
+		case code.OpGetBuiltin:
+			builtinIndex := code.ReadUint8(ins[ip+1:])
+			vm.currentFrame().ip += 1
+
+			definition := object.Builtins[builtinIndex]
+
+			err := vm.push(definition.Builtin)
 			if err != nil {
 				return err
 			}
@@ -542,16 +555,31 @@ func (vm *VM) executeHashIndex(hash, index object.Object) error {
 	return vm.push(pair.Value)
 }
 
-func (vm *VM) callFunction(numArgs int) error {
+func (vm *VM) executeCall(numArgs int) error {
+	callee := vm.stack[vm.sp-1-numArgs]
+	switch callee := callee.(type) {
+	case *object.CompiledFunction:
+		return vm.callFunction(callee, numArgs)
+	case *object.Builtin:
+		return vm.callBuiltin(callee, numArgs)
+	default:
+		return fmt.Errorf("calling non-function and non-built-in")
+	}
+}
+
+// func (vm *VM) callFunction(numArgs int) error {
+func (vm *VM) callFunction(fn *object.CompiledFunction, numArgs int) error {
 	// 注：
 	// 调用帧从 `vm.sp` 开始
 	// 当函数有参数时，运算帧的前 numArgs 个值都是实参
 	// 所以调用帧的开始位置修正为 `vm.sp - numArgs`
 	// CompiledFunction 的位置则是 `vm.sp - numArgs - 1`
-	fn, ok := vm.stack[vm.sp-numArgs-1].(*object.CompiledFunction) // **
-	if !ok {
-		return fmt.Errorf("calling non-function")
-	}
+
+	// --
+	// fn, ok := vm.stack[vm.sp-numArgs-1].(*object.CompiledFunction) // **
+	// if !ok {
+	// 	return fmt.Errorf("calling non-function")
+	// }
 
 	// 检查实参的数量
 	// 注：
@@ -564,5 +592,17 @@ func (vm *VM) callFunction(numArgs int) error {
 	frame := NewFrame(fn, vm.sp-numArgs)
 	vm.pushFrame(frame)                      // 压入新的调用帧
 	vm.sp = frame.basePointer + fn.NumLocals // 保留空间给（自定义函数的）局部变量
+	return nil
+}
+
+func (vm *VM) callBuiltin(builtin *object.Builtin, numArgs int) error {
+	args := vm.stack[vm.sp-numArgs : vm.sp]
+	result := builtin.Fn(args...)
+	vm.sp = vm.sp - numArgs - 1
+	if result != nil {
+		vm.push(result)
+	} else {
+		vm.push(Null)
+	}
 	return nil
 }
