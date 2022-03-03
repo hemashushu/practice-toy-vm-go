@@ -57,7 +57,11 @@ const (
 	OpSetLocal // 写局部变量
 
 	OpGetBuiltin // 获取内置函数
-	OpClosure    // 创建闭包
+
+	OpClosure // 创建闭包
+	OpGetFree // 读取闭包中捕获的局部变量的值
+
+	OpCurrentClosure
 )
 
 // 操作码（指令）详细信息列表
@@ -154,6 +158,10 @@ var definitions = map[Opcode]*Definition{
 	// 参数：1. UInt16 constant index，指向目标 *object.CompiledFunction
 	// 参数：1. UInt8 闭包局部变量的数量
 	OpClosure: {"OpClosure", []int{2, 1}},
+
+	OpGetFree: {"OpGetFree", []int{1}},
+
+	OpCurrentClosure: {"OpCurrentClosure", []int{}},
 }
 
 // 编译

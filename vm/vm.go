@@ -121,12 +121,19 @@ func (vm *VM) Run() error {
 		// 从 global 读取（带闭包的）函数字面量，并压入运算栈
 		case code.OpClosure:
 			constIndex := code.ReadUint16(ins[ip+1:]) // 函数字面量的位置
-			_ = code.ReadUint8(ins[ip+3:])            // 函数捕获局部变量的数量
+			numFree := code.ReadUint8(ins[ip+3:])     // 函数捕获局部变量的数量
 			vm.currentFrame().ip += 3
 
-			err := vm.pushClosure(int(constIndex))
+			err := vm.pushClosure(int(constIndex), int(numFree))
 			if err != nil {
 				return nil
+			}
+
+		case code.OpCurrentClosure:
+			currentClosure := vm.currentFrame().cl
+			err := vm.push(currentClosure)
+			if err != nil {
+				return err
 			}
 
 		// 弹出栈顶的最后一个值，用于清理语句执行后的 stack
@@ -201,6 +208,16 @@ func (vm *VM) Run() error {
 			frame := vm.currentFrame()
 
 			err := vm.push(vm.stack[frame.basePointer+int(localIndex)])
+			if err != nil {
+				return err
+			}
+
+		case code.OpGetFree:
+			freeIndex := code.ReadUint8(ins[ip+1:])
+			vm.currentFrame().ip += 1
+
+			currentClosure := vm.currentFrame().cl
+			err := vm.push(currentClosure.Free[freeIndex])
 			if err != nil {
 				return err
 			}
@@ -352,14 +369,23 @@ func (vm *VM) LastPoppedStackElem() object.Object {
 	return vm.stack[vm.sp]
 }
 
-func (vm *VM) pushClosure(constIndex int) error {
+func (vm *VM) pushClosure(constIndex int, numFree int) error {
 	constant := vm.constants[constIndex]
 	function, ok := constant.(*object.CompiledFunction)
 	if !ok {
 		return fmt.Errorf("not a function: %+v", constant)
 	}
 
-	closure := &object.Closure{Fn: function}
+	// 填充来自上层的的（即当前函数所捕获的）局部变量
+	free := make([]object.Object, numFree)
+	for i := 0; i < numFree; i++ {
+		free[i] = vm.stack[vm.sp-numFree+i]
+	}
+
+	// 从运算栈弹出来自上层的局部变量
+	vm.sp = vm.sp - numFree
+
+	closure := &object.Closure{Fn: function, Free: free}
 	return vm.push(closure)
 }
 

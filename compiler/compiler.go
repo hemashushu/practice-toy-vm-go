@@ -171,6 +171,10 @@ func (c *Compiler) Compile(n ast.Node) error {
 	case *ast.FunctionLiteral:
 		c.enterScope()
 
+		if node.Name != "" { // ++
+			c.symbolTable.DefineFunctionName(node.Name) // ++
+		}
+
 		// 添加形参（作为局部变量）
 		for _, p := range node.Parameters {
 			c.symbolTable.Define(p.Value)
@@ -194,8 +198,14 @@ func (c *Compiler) Compile(n ast.Node) error {
 			c.emit(code.OpReturn)
 		}
 
+		freeSymbols := c.symbolTable.FreeSymbols  // 函数主体内所捕获的外部局部变量列表
 		numLocals := c.symbolTable.numDefinitions // 计算函数主体内的局部变量的数量
 		instructions := c.leaveScope()
+
+		// 把被捕获的局部变量压入运算栈里，以被 OpClosure 所使用
+		for _, sym := range freeSymbols {
+			c.loadSymbol(sym)
+		}
 
 		compiledFn := &object.CompiledFunction{
 			Instructions:  instructions,
@@ -209,7 +219,8 @@ func (c *Compiler) Compile(n ast.Node) error {
 		// 这么做主要是为了简化实现的方法，不过一般的实践是合并到 instructions 里。
 		// c.emit(code.OpConstant, c.addConstant(compiledFn)) // --
 		fnIndex := c.addConstant(compiledFn)
-		c.emit(code.OpClosure, fnIndex, 0)
+		// c.emit(code.OpClosure, fnIndex, 0)
+		c.emit(code.OpClosure, fnIndex, len(freeSymbols))
 
 	case *ast.ReturnStatement:
 		err := c.Compile(node.ReturnValue)
@@ -240,12 +251,12 @@ func (c *Compiler) Compile(n ast.Node) error {
 
 	// 标识符定义和赋值语句
 	case *ast.LetStatement:
+		symbol := c.symbolTable.Define(node.Name.Value)
+
 		err := c.Compile(node.Value)
 		if err != nil {
 			return err
 		}
-
-		symbol := c.symbolTable.Define(node.Name.Value)
 
 		if symbol.Scope == GlobalScope { // ++
 			c.emit(code.OpSetGlobal, symbol.Index)
@@ -414,6 +425,10 @@ func (c *Compiler) loadSymbol(s Symbol) {
 		c.emit(code.OpGetLocal, s.Index)
 	case BuiltinScope:
 		c.emit(code.OpGetBuiltin, s.Index)
+	case FreeScope:
+		c.emit(code.OpGetFree, s.Index)
+	case FunctionScope:
+		c.emit(code.OpCurrentClosure)
 	}
 }
 
